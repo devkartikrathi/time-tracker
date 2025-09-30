@@ -2,6 +2,16 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from "recharts";
+const ResponsiveContainerTyped = ResponsiveContainer as any;
+const LineChartTyped = LineChart as any;
+const LineTyped = Line as any;
+const XAxisTyped = XAxis as any;
+const YAxisTyped = YAxis as any;
+const CartesianGridTyped = CartesianGrid as any;
+const TooltipTyped = Tooltip as any;
+const LegendTyped = Legend as any;
+const BarChartTyped = BarChart as any;
+const BarTyped = Bar as any;
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Task, Category } from "@/types/timeTracking";
 
@@ -33,7 +43,7 @@ export function TrendsChart({ tasks, categories, selectedDate }: TrendsChartProp
 
     // Add category data
     categories.forEach(category => {
-      const categoryTasks = dayTasks.filter(task => task.mainCategory === category.id);
+      const categoryTasks = dayTasks.filter(task => task.category === category.id);
       dataPoint[category.name] = categoryTasks.length;
     });
 
@@ -78,22 +88,22 @@ export function TrendsChart({ tasks, categories, selectedDate }: TrendsChartProp
           }`}>7-Day Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? "#374151" : "#E5E7EB"} />
-              <XAxis 
+          <ResponsiveContainerTyped width="100%" height={300}>
+            <LineChartTyped data={trendData}>
+              <CartesianGridTyped strokeDasharray="3 3" stroke={theme === 'dark' ? "#374151" : "#E5E7EB"} />
+              <XAxisTyped 
                 dataKey="date" 
                 stroke={theme === 'dark' ? "#9CA3AF" : "#6B7280"}
                 fontSize={12}
               />
-              <YAxis 
+              <YAxisTyped 
                 stroke={theme === 'dark' ? "#9CA3AF" : "#6B7280"}
                 fontSize={12}
               />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <TooltipTyped content={<CustomTooltip />} />
+              <LegendTyped />
               {categories.map(category => (
-                <Line
+                <LineTyped
                   key={category.id}
                   type="monotone"
                   dataKey={category.name}
@@ -102,8 +112,8 @@ export function TrendsChart({ tasks, categories, selectedDate }: TrendsChartProp
                   dot={{ fill: category.color, strokeWidth: 2, r: 4 }}
                 />
               ))}
-            </LineChart>
-          </ResponsiveContainer>
+            </LineChartTyped>
+          </ResponsiveContainerTyped>
         </CardContent>
       </Card>
 
@@ -119,30 +129,30 @@ export function TrendsChart({ tasks, categories, selectedDate }: TrendsChartProp
           }`}>Daily Activity Hours</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? "#374151" : "#E5E7EB"} />
-              <XAxis 
+          <ResponsiveContainerTyped width="100%" height={300}>
+            <BarChartTyped data={trendData}>
+              <CartesianGridTyped strokeDasharray="3 3" stroke={theme === 'dark' ? "#374151" : "#E5E7EB"} />
+              <XAxisTyped 
                 dataKey="date" 
                 stroke={theme === 'dark' ? "#9CA3AF" : "#6B7280"}
                 fontSize={12}
               />
-              <YAxis 
+              <YAxisTyped 
                 stroke={theme === 'dark' ? "#9CA3AF" : "#6B7280"}
                 fontSize={12}
               />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <TooltipTyped content={<CustomTooltip />} />
+              <LegendTyped />
               {categories.map((category, index) => (
-                <Bar
+                <BarTyped
                   key={category.id}
                   dataKey={category.name}
                   stackId="hours"
                   fill={category.color}
                 />
               ))}
-            </BarChart>
-          </ResponsiveContainer>
+            </BarChartTyped>
+          </ResponsiveContainerTyped>
         </CardContent>
       </Card>
     </div>

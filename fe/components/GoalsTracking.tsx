@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+// import { Progress } from "@/components/ui/progress";
 import { CircleCheck as CheckCircle, Clock, CircleAlert as AlertCircle, Plus, Pencil, Trash2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Task, Category, Goal } from "@/types/timeTracking";
@@ -13,44 +13,116 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 interface GoalsTrackingProps {
-  tasks: Task[];
   categories: Category[];
-  goals: Goal[];
-  onCreateGoal?: (goal: Omit<Goal, 'id'>) => void;
-  onUpdateGoal?: (goal: Goal) => void;
-  onDeleteGoal?: (goalId: string) => void;
+  selectedDate: Date;
 }
 
-export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdateGoal, onDeleteGoal }: GoalsTrackingProps) {
+export function GoalsTracking({ categories, selectedDate }: GoalsTrackingProps) {
   const { theme } = useTheme();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<null | { mode: 'create' } | { mode: 'edit', goal: Goal }>(null);
-  const [form, setForm] = useState<{ name: string; targetHours: string; categoryId: string; subcategoryId?: string }>({ name: '', targetHours: '1', categoryId: '', subcategoryId: undefined });
+  const [form, setForm] = useState<{ name: string; targetHours: string; category: string; subcategoryId: string }>({ name: '', targetHours: '1', category: '', subcategoryId: '' });
+
+  // Fetch goals and tasks data from database
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Get tasks for the current month for goal progress calculation
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth();
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        const [tasksRes, goalsRes] = await Promise.all([
+          fetch(`/api/tasks?startDate=${startDateStr}&endDate=${endDateStr}`),
+          fetch('/api/goals')
+        ]);
+        
+        const tasksJson = await tasksRes.json();
+        const goalsJson = await goalsRes.json();
+        
+        setTasks(tasksJson.data || []);
+        setGoals(goalsJson.data || []);
+      } catch (error) {
+        console.error('Error fetching goals data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [selectedDate]);
 
   const startCreate = () => {
-    setForm({ name: '', targetHours: '1', categoryId: categories[0]?.id || '', subcategoryId: undefined });
+    const firstCategory = categories[0];
+    const firstSubcategory = firstCategory?.subcategories[0];
+    setForm({ 
+      name: '', 
+      targetHours: '1', 
+      category: firstCategory?.id || '', 
+      subcategoryId: firstSubcategory?.id || '' 
+    });
     setOpen({ mode: 'create' });
   };
   const startEdit = (goal: Goal) => {
-    setForm({ name: goal.name, targetHours: String(goal.targetHours), categoryId: goal.categoryId, subcategoryId: goal.subcategoryId });
+    setForm({ name: goal.name, targetHours: String(goal.targetHours), category: goal.category, subcategoryId: goal.subcategoryId });
     setOpen({ mode: 'edit', goal });
   };
-  const save = () => {
+  const save = async () => {
     const payload: Omit<Goal, 'id'> = {
       name: form.name.trim() || 'New Goal',
       targetHours: Math.max(1, Number(form.targetHours) || 1),
-      categoryId: form.categoryId,
-      subcategoryId: form.subcategoryId || undefined
+      category: form.category as any,
+      subcategoryId: form.subcategoryId
     };
-    if (open?.mode === 'create' && onCreateGoal) onCreateGoal(payload);
-    if (open?.mode === 'edit' && onUpdateGoal && open.goal) onUpdateGoal({ id: open.goal.id, ...payload });
+    try {
+      if (open?.mode === 'create') {
+        const response = await fetch('/api/goals', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify(payload) 
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setGoals(prev => [...prev, result.data]);
+        }
+      } else if (open?.mode === 'edit' && open.goal) {
+        const response = await fetch(`/api/goals/${open.goal.id}`, { 
+          method: 'PATCH', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify(payload) 
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setGoals(prev => prev.map(g => g.id === open.goal.id ? result.data : g));
+        }
+      }
+    } catch (error) {
+      console.error('Error saving goal:', error);
+    }
     setOpen(null);
+  };
+
+  const deleteGoal = async (goalId: string) => {
+    try {
+      const response = await fetch(`/api/goals/${goalId}`, { method: 'DELETE' });
+      if (response.ok) {
+        setGoals(prev => prev.filter(g => g.id !== goalId));
+      }
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+    }
   };
   const getGoalProgress = (goal: Goal) => {
     const relevantTasks = tasks.filter(task => {
-      if (goal.subcategoryId) {
-        return task.mainCategory === goal.categoryId && task.subcategory === goal.subcategoryId;
-      }
-      return task.mainCategory === goal.categoryId;
+      return task.category === goal.category && task.subcategoryId === goal.subcategoryId;
     });
 
     const currentHours = relevantTasks.length;
@@ -87,6 +159,28 @@ export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdate
     }
   };
 
+  if (loading) {
+    return (
+      <Card className={`border shadow-sm ${
+        theme === 'dark' 
+          ? 'bg-gray-900 border-gray-800' 
+          : 'bg-white border-gray-200'
+      }`}>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Goals Tracking</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-32">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Loading goals...</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className={`border shadow-sm ${
       theme === 'dark' 
@@ -98,11 +192,9 @@ export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdate
           <CardTitle className={`${
             theme === 'dark' ? 'text-white' : 'text-gray-900'
           } text-base sm:text-lg`}>Daily Goals</CardTitle>
-          {onCreateGoal && (
-            <Button size="sm" onClick={startCreate} className="gap-2">
-              <Plus className="w-4 h-4" /> Add Goal
-            </Button>
-          )}
+          <Button size="sm" onClick={startCreate} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Goal
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="px-4 sm:px-6">
@@ -130,25 +222,25 @@ export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdate
                     <div className={`text-xs sm:text-sm font-medium ${getStatusColor(progress.status)}`}>
                       {progress.progress.toFixed(0)}%
                     </div>
-                    {onUpdateGoal && (
-                      <Button size="icon" variant="ghost" onClick={() => startEdit(goal)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {onDeleteGoal && (
-                      <Button size="icon" variant="ghost" className="text-red-500" onClick={() => onDeleteGoal(goal.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
+                    <Button size="icon" variant="ghost" onClick={() => startEdit(goal)}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="text-red-500" onClick={() => deleteGoal(goal.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
                 
-                <Progress 
-                  value={progress.progress} 
-                  className={`h-2 ${
+                <div 
+                  className={`h-2 rounded-full ${
                     theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
                   }`}
-                />
+                >
+                  <div 
+                    className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(progress.progress, 100)}%` }}
+                  />
+                </div>
                 
                 <div className={`flex justify-between text-xs sm:text-sm ${
                   theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
@@ -194,7 +286,15 @@ export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdate
               </div>
               <div className="space-y-1">
                 <Label>Category</Label>
-                <Select value={form.categoryId} onValueChange={(v) => setForm({ ...form, categoryId: v, subcategoryId: undefined })}>
+                <Select value={form.category} onValueChange={(v) => {
+                  const selectedCategory = categories.find(c => c.id === v);
+                  const firstSubcategory = selectedCategory?.subcategories[0];
+                  setForm({ 
+                    ...form, 
+                    category: v, 
+                    subcategoryId: firstSubcategory?.id || '' 
+                  });
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
@@ -205,16 +305,15 @@ export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdate
                   </SelectContent>
                 </Select>
               </div>
-              {form.categoryId && (
+              {form.category && (
                 <div className="space-y-1">
-                  <Label>Subcategory (optional)</Label>
-                  <Select value={form.subcategoryId ?? '__none__'} onValueChange={(v) => setForm({ ...form, subcategoryId: v === '__none__' ? undefined : v })}>
+                  <Label>Subcategory (required)</Label>
+                  <Select value={form.subcategoryId} onValueChange={(v) => setForm({ ...form, subcategoryId: v })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="All subcategories" />
+                      <SelectValue placeholder="Select subcategory" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">All</SelectItem>
-                      {(categories.find(c => c.id === form.categoryId)?.subcategories || []).map(s => (
+                      {(categories.find(c => c.id === form.category)?.subcategories || []).map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -223,7 +322,12 @@ export function GoalsTracking({ tasks, categories, goals, onCreateGoal, onUpdate
               )}
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setOpen(null)}>Cancel</Button>
-                <Button onClick={save}>Save</Button>
+                <Button 
+                  onClick={save} 
+                  disabled={!form.name.trim() || !form.subcategoryId}
+                >
+                  Save
+                </Button>
               </div>
             </div>
           </DialogContent>

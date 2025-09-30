@@ -19,7 +19,14 @@ interface NavbarProps {
 export function Navbar({ isAuthenticated = false, activeTab, onTabChange, onCategoriesClick, activeAnalyticsView, onAnalyticsViewChange }: NavbarProps) {
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
-  const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const [hasClerk, setHasClerk] = React.useState(false);
+  const [isHydrated, setIsHydrated] = React.useState(false);
+
+  // Handle client-side hydration
+  React.useEffect(() => {
+    setHasClerk(!!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+    setIsHydrated(true);
+  }, []);
 
   const navigationItems = [];
 
@@ -132,7 +139,26 @@ export function Navbar({ isAuthenticated = false, activeTab, onTabChange, onCate
               />
             ) : (
               <div className="hidden md:flex items-center space-x-3">
-                {hasClerk ? (
+                {!isHydrated ? (
+                  // Server-side rendering fallback
+                  <>
+                    <Link href="/sign-in">
+                      <Button
+                        variant="ghost"
+                        className={`text-sm font-medium transition-colors duration-200 ${
+                          theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Log in
+                      </Button>
+                    </Link>
+                    <Link href="/sign-up">
+                      <Button className="bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-all duration-200">
+                        Sign up
+                      </Button>
+                    </Link>
+                  </>
+                ) : hasClerk ? (
                   <>
                     <SignInButton mode="modal">
                       <Button
@@ -238,7 +264,22 @@ export function Navbar({ isAuthenticated = false, activeTab, onTabChange, onCate
               )}
               {!isAuthenticated && (
                 <div className="flex items-center justify-between gap-2">
-                  {hasClerk ? (
+                  {!isHydrated ? (
+                    // Server-side rendering fallback
+                    <>
+                      <Link href="/sign-in" className="flex-1">
+                        <Button
+                          variant="ghost"
+                          className={`w-full ${theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                          Log in
+                        </Button>
+                      </Link>
+                      <Link href="/sign-up" className="flex-1">
+                        <Button className="w-full bg-gray-900 hover:bg-gray-800 text-white">Sign up</Button>
+                      </Link>
+                    </>
+                  ) : hasClerk ? (
                     <>
                       <SignInButton mode="modal">
                         <Button

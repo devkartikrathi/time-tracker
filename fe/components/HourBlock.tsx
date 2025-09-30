@@ -35,7 +35,7 @@ export function HourBlock({ hour, task, onClick }: HourBlockProps) {
       )}
       style={{
         backgroundColor: task 
-          ? `${task.color}CC` // Add transparency
+          ? `${task.subcategory?.color || '#9ca3af'}CC` // Add transparency, fallback to gray
           : theme === 'dark' 
             ? 'rgba(31, 41, 55, 0.3)' 
             : 'rgba(255, 255, 255, 0.3)',

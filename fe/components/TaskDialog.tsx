@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,8 +37,8 @@ export function TaskDialog({
   selectedCount = 1
 }: TaskDialogProps) {
   const { theme } = useTheme();
-  const [selectedCategory, setSelectedCategory] = useState(existingTask?.mainCategory || '');
-  const [selectedSubcategory, setSelectedSubcategory] = useState(existingTask?.subcategory || '');
+  const [selectedCategory, setSelectedCategory] = useState(existingTask?.category || '');
+  const [selectedSubcategory, setSelectedSubcategory] = useState(existingTask?.subcategoryId || '');
   const [selectedWellBeingTags, setSelectedWellBeingTags] = useState<WellBeingTag[]>(
     existingTask?.wellBeingTags || []
   );
@@ -51,7 +51,7 @@ export function TaskDialog({
   };
 
   const selectedCategoryData = categories.find(c => c.id === selectedCategory);
-  const availableSubcategories = selectedCategoryData?.subcategories || [];
+  const availableSubcategories = useMemo(() => selectedCategoryData?.subcategories || [], [selectedCategoryData]);
 
   useEffect(() => {
     if (selectedCategory && !selectedSubcategory) {
@@ -70,10 +70,8 @@ export function TaskDialog({
 
     onSave({
       taskName: subcategory.name, // Use subcategory name as task name
-      mainCategory: selectedCategory,
-      subcategory: selectedSubcategory,
+      category: selectedCategory as any,
       subcategoryId: selectedSubcategory,
-      color: subcategory.color,
       wellBeingTags: selectedWellBeingTags,
       duration: 1
     });

@@ -2,6 +2,11 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+const ResponsiveContainerTyped = ResponsiveContainer as any;
+const PieChartTyped = PieChart as any;
+const PieTyped = Pie as any;
+const CellTyped = Cell as any;
+const TooltipTyped = Tooltip as any;
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Task, Category } from "@/types/timeTracking";
 
@@ -14,7 +19,7 @@ export function AnalyticsCharts({ tasks, categories }: AnalyticsChartsProps) {
   const { theme } = useTheme();
   // Aggregate data by category
   const categoryData = categories.map(category => {
-    const categoryTasks = tasks.filter(task => task.mainCategory === category.id);
+    const categoryTasks = tasks.filter(task => task.category === category.id);
     return {
       name: category.name,
       hours: categoryTasks.length,
@@ -28,7 +33,7 @@ export function AnalyticsCharts({ tasks, categories }: AnalyticsChartsProps) {
   categories.forEach(category => {
     category.subcategories.forEach(subcategory => {
       const subcategoryTasks = tasks.filter(
-        task => task.mainCategory === category.id && task.subcategory === subcategory.id
+        task => task.category === category.id && task.subcategoryId === subcategory.id
       );
       if (subcategoryTasks.length > 0) {
         subcategoryData.push({
@@ -82,29 +87,31 @@ export function AnalyticsCharts({ tasks, categories }: AnalyticsChartsProps) {
         </CardHeader>
         <CardContent>
           {categoryData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
+            <div style={{ width: "100%", height: 240 }}>
+              <ResponsiveContainerTyped width="100%" height="100%">
+              <PieChartTyped>
+                <PieTyped
                   data={categoryData}
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="hours"
-                  label={({ name, percent }) => `${name} (${((percent as number) * 100).toFixed(1)}%)`}
+                  label={({ name, percent }: any) => `${name} (${((percent as number) * 100).toFixed(1)}%)`}
                 >
                   {categoryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <CellTyped key={`cell-${index}`} fill={entry.color} />
                   ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
+                </PieTyped>
+                <TooltipTyped content={<CustomTooltip />} />
+              </PieChartTyped>
+              </ResponsiveContainerTyped>
+            </div>
           ) : (
             <div className={`h-[300px] flex items-center justify-center ${
               theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
             }`}>
-              No activities logged for this day
+              No activities yet. Start by adding categories and logging time.
             </div>
           )}
         </CardContent>
@@ -166,7 +173,7 @@ export function AnalyticsCharts({ tasks, categories }: AnalyticsChartsProps) {
             <div className={`text-center py-8 ${
               theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
             }`}>
-              No activities logged for this day
+              No activities yet. Start by adding categories and logging time.
             </div>
           )}
         </CardContent>

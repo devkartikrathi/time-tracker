@@ -88,8 +88,6 @@ export function MonthlyGrid({
 
   const handleTaskSave = async (taskData: any) => {
     if (selectedCells.length > 0) {
-      console.log('Saving tasks for cells:', selectedCells);
-      
       // Process tasks one by one with a small delay to avoid state conflicts
       for (let i = 0; i < selectedCells.length; i++) {
         const cell = selectedCells[i];
@@ -98,7 +96,6 @@ export function MonthlyGrid({
           date: `${year}-${String(month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`,
           hour: cell.hour,
         };
-        console.log(`Creating task ${i + 1}/${selectedCells.length}:`, task);
         onTaskUpdate(task);
         
         // Small delay to prevent state update conflicts
@@ -213,9 +210,10 @@ export function MonthlyGrid({
               {/* Hour Cells */}
               {hours.map(hour => {
                 const task = getTaskForCell(day, hour);
-                const category = task ? categories.find(cat => cat.id === task.mainCategory) : null;
-                // If subcategory is missing (e.g., removed), fall back to the category itself for color and label
-                const subcategory = task && category ? (category.subcategories.find(sub => sub.id === task.subcategory) || null) : null;
+                const category = task ? categories.find(cat => cat.id === task.category) : null;
+                // Use subcategory data from the task object if available, otherwise fall back to finding it
+                const subcategory = task?.subcategory || 
+                  (task && category ? (category.subcategories.find(sub => sub.id === task.subcategoryId) || null) : null);
                 
                 const isSelected = isCellSelected(day, hour);
                 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AnalyticsCharts } from "./AnalyticsCharts";
 import { GoalsTracking } from "./GoalsTracking";
 import { WellBeingWheel } from "./WellBeingWheel";
@@ -9,19 +9,51 @@ import { useTheme } from "@/contexts/ThemeContext";
 import type { Task, Category, Goal } from "@/types/timeTracking";
 
 interface AnalyticsProps {
-  tasks: Task[];
   categories: Category[];
-  goals: Goal[];
   selectedDate: Date;
-  activeView?: "overview" | "trends";
-  onViewChange?: (view: "overview" | "trends") => void;
-  onCreateGoal?: (goal: Omit<Goal, 'id'>) => void;
-  onUpdateGoal?: (goal: Goal) => void;
-  onDeleteGoal?: (goalId: string) => void;
+  activeView?: "overview" | "goals" | "trends";
+  onViewChange?: (view: "overview" | "goals" | "trends") => void;
 }
 
-export function Analytics({ tasks, categories, goals, selectedDate, activeView = "overview", onViewChange, onCreateGoal, onUpdateGoal, onDeleteGoal }: AnalyticsProps) {
+export function Analytics({ categories, selectedDate, activeView = "overview", onViewChange }: AnalyticsProps) {
   const { theme } = useTheme();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch analytics data from database
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      try {
+        setLoading(true);
+        
+        // Get tasks for the past 30 days for comprehensive analytics
+        const endDate = new Date(selectedDate);
+        const startDate = new Date(selectedDate);
+        startDate.setDate(startDate.getDate() - 30);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        const [tasksRes, goalsRes] = await Promise.all([
+          fetch(`/api/tasks?startDate=${startDateStr}&endDate=${endDateStr}`),
+          fetch('/api/goals')
+        ]);
+        
+        const tasksJson = await tasksRes.json();
+        const goalsJson = await goalsRes.json();
+        
+        setTasks(tasksJson.data || []);
+        setGoals(goalsJson.data || []);
+      } catch (error) {
+        console.error('Error fetching analytics data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAnalyticsData();
+  }, [selectedDate]);
 
   // Get tasks for the selected date
   const selectedDateStr = selectedDate.toISOString().split('T')[0];
@@ -35,6 +67,55 @@ export function Analytics({ tasks, categories, goals, selectedDate, activeView =
   });
 
   const weekTasks = tasks.filter(task => last7Days.includes(task.date));
+
+  // Goal management functions
+  const onCreateGoal = async (goal: Omit<Goal, 'id'>) => {
+    try {
+      const response = await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(goal)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setGoals(prev => [...prev, result.data]);
+      }
+    } catch (error) {
+      console.error('Error creating goal:', error);
+    }
+  };
+
+  const onUpdateGoal = async (goal: Goal) => {
+    try {
+      const response = await fetch(`/api/goals/${goal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(goal)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setGoals(prev => prev.map(g => g.id === goal.id ? result.data : g));
+      }
+    } catch (error) {
+      console.error('Error updating goal:', error);
+    }
+  };
+
+  const onDeleteGoal = async (goalId: string) => {
+    try {
+      const response = await fetch(`/api/goals/${goalId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setGoals(prev => prev.filter(g => g.id !== goalId));
+      }
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+    }
+  };
 
   // Calculate well-being scores based on tasks
   const calculateWellBeingScores = () => {
@@ -70,6 +151,17 @@ export function Analytics({ tasks, categories, goals, selectedDate, activeView =
     return scores;
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading analytics data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
 
@@ -92,7 +184,9 @@ export function Analytics({ tasks, categories, goals, selectedDate, activeView =
           </div>
         )}
         
-        {/* Goals page moved to main navbar; removed from sub-views */}
+        {activeView === "goals" && (
+          <GoalsTracking categories={categories} selectedDate={selectedDate} />
+        )}
         
         {activeView === "trends" && (
           <TrendsChart tasks={weekTasks} categories={categories} selectedDate={selectedDate} />

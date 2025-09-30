@@ -121,51 +121,105 @@ export function CategorySetup({ categories, onSave, onClose }: CategorySetupProp
     }
   };
 
-  const saveSubcategory = () => {
+  const saveSubcategory = async () => {
     if (!editingSubcategory || !editingSubcategory.name.trim()) return;
 
-    setEditingCategories(prev => prev.map(category => {
-      if (category.id === editingSubcategory.categoryId) {
-        const subcategories = [...category.subcategories];
-        
-        if (editingSubcategory.subcategoryId) {
-          // Edit existing
-          const index = subcategories.findIndex(s => s.id === editingSubcategory.subcategoryId);
-          if (index >= 0) {
-            subcategories[index] = {
-              ...subcategories[index],
-              name: editingSubcategory.name,
-              color: editingSubcategory.color
-            };
-          }
-        } else {
-          // Add new
-          const newId = `${category.id}-${Date.now()}`;
-          subcategories.push({
-            id: newId,
+    try {
+      let response;
+      
+      if (editingSubcategory.subcategoryId && !editingSubcategory.subcategoryId.startsWith('temp-')) {
+        // Edit existing subcategory (only if it has a real database ID)
+        response = await fetch(`/api/subcategories/${editingSubcategory.subcategoryId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             name: editingSubcategory.name,
             color: editingSubcategory.color
-          });
-        }
-        
-        return { ...category, subcategories };
+          })
+        });
+      } else {
+        // Create new subcategory
+        response = await fetch('/api/subcategories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category: editingSubcategory.categoryId,
+            name: editingSubcategory.name,
+            color: editingSubcategory.color
+          })
+        });
       }
-      return category;
-    }));
 
-    setEditingSubcategory(null);
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Update local state with the real database ID
+        setEditingCategories(prev => prev.map(category => {
+          if (category.id === editingSubcategory.categoryId) {
+            const subcategories = [...category.subcategories];
+            
+            if (editingSubcategory.subcategoryId && !editingSubcategory.subcategoryId.startsWith('temp-')) {
+              // Edit existing
+              const index = subcategories.findIndex(s => s.id === editingSubcategory.subcategoryId);
+              if (index >= 0) {
+                subcategories[index] = {
+                  ...subcategories[index],
+                  name: editingSubcategory.name,
+                  color: editingSubcategory.color
+                };
+              }
+            } else {
+              // Add new with real database ID
+              subcategories.push({
+                id: result.data.id,
+                name: editingSubcategory.name,
+                color: editingSubcategory.color,
+                category: result.data.category
+              });
+            }
+            
+            return { ...category, subcategories };
+          }
+          return category;
+        }));
+
+        setEditingSubcategory(null);
+      } else {
+        throw new Error('Failed to save subcategory');
+      }
+    } catch (error) {
+      console.error('Error saving subcategory:', error);
+      alert('Failed to save subcategory. Please try again.');
+    }
   };
 
-  const removeSubcategory = (categoryId: string, subcategoryId: string) => {
-    setEditingCategories(prev => prev.map(category => {
-      if (category.id === categoryId) {
-        return {
-          ...category,
-          subcategories: category.subcategories.filter(s => s.id !== subcategoryId)
-        };
+  const removeSubcategory = async (categoryId: string, subcategoryId: string) => {
+    try {
+      // Only try to delete from database if it's a real ID (not a temp one)
+      if (!subcategoryId.startsWith('temp-')) {
+        const response = await fetch(`/api/subcategories/${subcategoryId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to delete subcategory from database');
+        }
       }
-      return category;
-    }));
+
+      // Update local state
+      setEditingCategories(prev => prev.map(category => {
+        if (category.id === categoryId) {
+          return {
+            ...category,
+            subcategories: category.subcategories.filter(s => s.id !== subcategoryId)
+          };
+        }
+        return category;
+      }));
+    } catch (error) {
+      console.error('Error deleting subcategory:', error);
+      alert('Failed to delete subcategory. Please try again.');
+    }
   };
 
   return (

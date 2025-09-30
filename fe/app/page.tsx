@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Clock, BarChart3, Target, Heart, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 
 export default function Home() {
   const hasClerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -199,25 +200,37 @@ export default function Home() {
 }
 
 function AuthenticatedHome() {
-  // Dynamically import Clerk components to avoid SSR issues
-  const [ClerkComponents, setClerkComponents] = React.useState<any>(null);
-  
-  React.useEffect(() => {
-    import('@clerk/nextjs').then((clerk) => {
-      setClerkComponents(clerk);
-    });
-  }, []);
-
-  if (!ClerkComponents) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white"></div>
-      </div>
-    );
-  }
-
-  const { useUser, SignInButton, SignUpButton } = ClerkComponents;
   const { isLoaded, isSignedIn } = useUser();
+
+  // Check user status and onboarding
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && isSignedIn) {
+      const checkUserStatus = async () => {
+        try {
+          const response = await fetch('/api/user')
+          
+          if (response.ok) {
+            const data = await response.json()
+            
+            if (!data.onboardingCompleted) {
+              window.location.replace('/onboarding')
+            }
+          } else {
+            window.location.replace('/onboarding')
+          }
+        } catch (error) {
+          window.location.replace('/onboarding')
+        }
+      }
+      
+      checkUserStatus()
+    } else if (typeof window !== 'undefined' && !isSignedIn) {
+      // Clear any cached data when user signs out
+      localStorage.removeItem('onboardingCompleted')
+      localStorage.removeItem('onboardingData')
+      document.cookie = 'onboardingCompleted=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
+    }
+  }, [isSignedIn]);
 
   if (!isLoaded) {
     return (
