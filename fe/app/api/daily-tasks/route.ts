@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDatabaseUserId } from '@/lib/user-init'
 import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import type { HourData } from '@/types/timeTracking'
 
 // Force dynamic rendering for this API route
@@ -31,7 +32,8 @@ export async function GET(req: Request) {
             whereClause.date = date
         }
 
-        const dailyTasks = await prisma.dailyTask.findMany({
+        const db = prisma ?? new PrismaClient()
+        const dailyTasks = await db.dailyTask.findMany({
             where: whereClause,
             orderBy: { date: 'asc' }
         })
