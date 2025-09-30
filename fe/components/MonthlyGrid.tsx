@@ -299,7 +299,7 @@ export function MonthlyGrid({
         </Button>
         
         <div className="text-center flex-1">
-          <h2 className="text-xl sm:text-3xl font-semibold tracking-tight">
+          <h2 className="text-lg sm:text-2xl font-semibold tracking-tight">
             {selectedDate.toLocaleDateString('en-US', { 
               year: 'numeric', 
               month: 'long' 

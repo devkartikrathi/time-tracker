@@ -242,46 +242,7 @@ export function Navbar({ isAuthenticated = false, activeTab, onTabChange, onCate
                   </Button>
                 </div>
               )}
-              {isAuthenticated && onAnalyticsViewChange && activeTab === 'analytics' && (
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 px-2">Analytics Views</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button 
-                      variant={activeAnalyticsView === 'overview' ? 'default' : 'ghost'} 
-                      size="sm"
-                      onClick={() => { onAnalyticsViewChange('overview'); setIsMobileMenuOpen(false); }} 
-                      className={activeAnalyticsView === 'overview' 
-                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                        : theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-700 hover:text-gray-900'
-                      }
-                    >
-                      Overview
-                    </Button>
-                    <Button 
-                      variant={activeAnalyticsView === 'goals' ? 'default' : 'ghost'} 
-                      size="sm"
-                      onClick={() => { onAnalyticsViewChange('goals'); setIsMobileMenuOpen(false); }} 
-                      className={activeAnalyticsView === 'goals' 
-                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                        : theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-700 hover:text-gray-900'
-                      }
-                    >
-                      Goals
-                    </Button>
-                    <Button 
-                      variant={activeAnalyticsView === 'trends' ? 'default' : 'ghost'} 
-                      size="sm"
-                      onClick={() => { onAnalyticsViewChange('trends'); setIsMobileMenuOpen(false); }} 
-                      className={activeAnalyticsView === 'trends' 
-                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                        : theme === 'dark' ? 'text-gray-300 hover:text-white' : 'text-gray-700 hover:text-gray-900'
-                      }
-                    >
-                      Trends
-                    </Button>
-                  </div>
-                </div>
-              )}
+              {/* Secondary analytics navbar removed */}
               {isAuthenticated && onCategoriesClick && (
                 <Button
                   onClick={() => { onCategoriesClick(); setIsMobileMenuOpen(false); }}
