@@ -5,6 +5,7 @@ import type { HourData } from '@/types/timeTracking'
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 // GET daily tasks for a date range
 export async function GET(req: Request) {
