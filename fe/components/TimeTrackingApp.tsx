@@ -7,12 +7,12 @@ import { Analytics } from "./Analytics";
 import { CategorySetup } from "./CategorySetup";
 import { GoalsTracking } from "./GoalsTracking";
 import { Navbar } from "./Navbar";
-// import { AnalyticsNavbar } from "./AnalyticsNavbar";
 import { Button } from "@/components/ui/button";
 import { Settings } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { Task, Category, Goal, WellBeingTag } from "@/types/timeTracking";
+import type { Task, Category, Goal, WellBeingTag, DailyTask } from "@/types/timeTracking";
 import { CATEGORY_LIST } from "@/lib/constants";
+import { convertDailyTaskToTasks } from "@/lib/task-converter";
 
 // Use constants for categories
 const defaultCategories: Category[] = CATEGORY_LIST.map(cat => ({
@@ -30,6 +30,7 @@ export function TimeTrackingApp() {
   const [showCategorySetup, setShowCategorySetup] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([]);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [goals, setGoals] = useState<Goal[]>(defaultGoals);
 
@@ -63,85 +64,90 @@ export function TimeTrackingApp() {
     const loadTasks = async () => {
       try {
         if (activeTab === "dashboard") {
-          // For MonthlyGrid, load tasks for the entire month
+          // For MonthlyGrid, load daily tasks for the entire month (optimized)
           const year = selectedDate.getFullYear();
           const month = selectedDate.getMonth();
           const startDate = new Date(year, month, 1);
           const endDate = new Date(year, month + 1, 0);
           
-          const startDateStr = startDate.toISOString().split('T')[0];
-          const endDateStr = endDate.toISOString().split('T')[0];
+          // Format dates as YYYY-MM-DD without timezone issues
+          const startDateStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+          const endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
           
-          const res = await fetch(`/api/tasks?startDate=${startDateStr}&endDate=${endDateStr}`);
-          const json = await res.json();
-          setTasks(json.data || []);
+          // Load daily tasks (new optimized format)
+          const dailyTasksRes = await fetch(`/api/daily-tasks?startDate=${startDateStr}&endDate=${endDateStr}`);
+          const dailyTasksJson = await dailyTasksRes.json();
+          setDailyTasks(dailyTasksJson.data || []);
+          
+          // Convert daily tasks to individual tasks for backward compatibility
+          const allTasks: Task[] = [];
+          (dailyTasksJson.data || []).forEach((dailyTask: DailyTask) => {
+            const convertedTasks = convertDailyTaskToTasks(dailyTask);
+            allTasks.push(...convertedTasks);
+          });
+          setTasks(allTasks);
         } else {
-          // For other views, load tasks for the specific date
-          const date = selectedDate.toISOString().split('T')[0];
-          const res = await fetch(`/api/tasks?date=${date}`);
-          const json = await res.json();
-          setTasks(json.data || []);
+          // For other views, load daily tasks for the specific date
+          const date = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+          const dailyTasksRes = await fetch(`/api/daily-tasks?date=${date}`);
+          const dailyTasksJson = await dailyTasksRes.json();
+          setDailyTasks(dailyTasksJson.data || []);
+          
+          // Convert daily tasks to individual tasks for backward compatibility
+          const allTasks: Task[] = [];
+          (dailyTasksJson.data || []).forEach((dailyTask: DailyTask) => {
+            const convertedTasks = convertDailyTaskToTasks(dailyTask);
+            allTasks.push(...convertedTasks);
+          });
+          setTasks(allTasks);
         }
       } catch {}
     };
     loadTasks();
   }, [selectedDate, activeTab]);
 
+  // Legacy function for backward compatibility - no longer used
   const addOrUpdateTask = async (task: Omit<Task, 'id'>) => {
+    // This function is kept for backward compatibility but should not be called
+  };
+
+  const updateDailyTask = async (dailyTask: DailyTask) => {
     try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
+      const response = await fetch('/api/daily-tasks', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          date: task.date,
-          hour: task.hour,
-          taskName: task.taskName,
-          duration: task.duration,
-          wellBeingTags: task.wellBeingTags || [],
-          category: task.category,
-          subcategoryId: task.subcategoryId,
+          date: dailyTask.date,
+          hours: dailyTask.hours,
+          wellBeingTags: dailyTask.wellBeingTags
         })
       });
       
       if (response.ok) {
         const result = await response.json();
-        const savedTask = result.data;
+        const savedDailyTask = result.data;
         
         // Update local state immediately for faster UI response
-        setTasks(prev => {
-          const existingIndex = prev.findIndex(t => 
-            t.date === savedTask.date && t.hour === savedTask.hour
-          );
+        setDailyTasks(prev => {
+          const existingIndex = prev.findIndex(dt => dt.date === savedDailyTask.date);
           
           if (existingIndex >= 0) {
-            // Update existing task
+            // Update existing daily task
             const updated = [...prev];
-            updated[existingIndex] = savedTask;
+            updated[existingIndex] = savedDailyTask;
             return updated;
           } else {
-            // Add new task
-            return [...prev, savedTask].sort((a, b) => {
-              if (a.date !== b.date) return a.date.localeCompare(b.date);
-              return a.hour - b.hour;
-            });
+            // Add new daily task
+            return [...prev, savedDailyTask].sort((a, b) => a.date.localeCompare(b.date));
           }
         });
       }
     } catch {}
   };
 
+  // Legacy function for backward compatibility - no longer used
   const removeTask = async (taskId: string) => {
-    // Find task with this composed id or fallback to first match
-    const target = tasks.find(t => t.id === taskId) || tasks.find(t => `${t.date}-${t.hour}` === taskId);
-    if (!target) return;
-    try {
-      const response = await fetch(`/api/tasks/${target.id}`, { method: 'DELETE' });
-      
-      if (response.ok) {
-        // Update local state immediately for faster UI response
-        setTasks(prev => prev.filter(t => t.id !== target.id));
-      }
-    } catch {}
+    // This function is kept for backward compatibility but should not be called
   };
 
   const updateCategories = async (_newCategories: Category[]) => {
@@ -184,8 +190,10 @@ export function TimeTrackingApp() {
             <MonthlyGrid
               selectedDate={selectedDate}
               tasks={tasks}
+              dailyTasks={dailyTasks}
               categories={categories}
               onTaskUpdate={addOrUpdateTask}
+              onDailyTaskUpdate={updateDailyTask}
               onTaskRemove={removeTask}
               onDateChange={setSelectedDate}
             />
@@ -201,7 +209,7 @@ export function TimeTrackingApp() {
           ) : (
             <div className="max-w-4xl mx-auto">
               {(() => {
-                const selectedDateStr = selectedDate.toISOString().split('T')[0];
+                const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
                 const todayTasks = tasks.filter(t => t.date === selectedDateStr);
                 return (
                   <GoalsTracking

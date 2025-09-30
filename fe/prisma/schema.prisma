@@ -30,7 +30,7 @@ model User {
 
   // Relations
   subcategories Subcategory[]
-  tasks         Task[]
+  dailyTasks    DailyTask[] // Optimized daily tasks
   goals         Goal[]
 
   @@map("users")
@@ -47,31 +47,26 @@ model Subcategory {
 
   // Relations
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tasks Task[]
   goals Goal[]
 
   @@map("subcategories")
 }
 
-model Task {
-  id            String       @id @default(cuid())
-  date          String // YYYY-MM-DD format
-  hour          Int // 0-23
-  taskName      String
-  duration      Int          @default(1) // in hours
-  wellBeingTags String[] // Array of well-being tags
+// New optimized daily task model
+model DailyTask {
+  id            String   @id @default(cuid())
+  date          String   @unique // YYYY-MM-DD format, unique per user
   userId        String
-  category      CategoryType // REST, WORK, or OTHER
-  subcategoryId String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  wellBeingTags String[] // Array of well-being tags for the entire day
+  hours         Json // Array of 24 hours, each can be null or contain task data
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subcategory Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, date, hour])
-  @@map("tasks")
+  @@unique([userId, date])
+  @@map("daily_tasks")
 }
 
 model Goal {

@@ -56,7 +56,7 @@ const ChartContainer = React.forwardRef<
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        {(RechartsPrimitive.ResponsiveContainer as any)({ children })}
+        {(RechartsPrimitive.ResponsiveContainer as any)({ children: children as any })}
       </div>
     </ChartContext.Provider>
   );
@@ -201,7 +201,7 @@ const ChartTooltipContent = React.forwardRef<
                 )}
               >
                 {formatter && item?.value !== undefined && item.name ? (
-                  formatter(item.value, item.name, item, index, item.payload)
+                  formatter(item.value, item.name, item, index, item.payload) as React.ReactNode
                 ) : (
                   <>
                     {itemConfig?.icon ? (

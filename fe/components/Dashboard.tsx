@@ -38,7 +38,7 @@ export function Dashboard({
   const handleTaskSave = (taskData: any) => {
     const task = {
       ...taskData,
-      date: selectedDate.toISOString().split('T')[0],
+      date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`,
       hour: selectedHour!,
     };
     onTaskUpdate(task);
@@ -48,7 +48,7 @@ export function Dashboard({
 
   const handleTaskRemove = () => {
     if (selectedHour !== null) {
-      const taskId = `${selectedDate.toISOString().split('T')[0]}-${selectedHour}`;
+      const taskId = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}-${selectedHour}`;
       onTaskRemove(taskId);
       setShowTaskDialog(false);
       setSelectedHour(null);

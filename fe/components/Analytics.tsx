@@ -6,7 +6,8 @@ import { GoalsTracking } from "./GoalsTracking";
 import { WellBeingWheel } from "./WellBeingWheel";
 import { TrendsChart } from "./TrendsChart";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { Task, Category, Goal } from "@/types/timeTracking";
+import type { Task, Category, Goal, DailyTask } from "@/types/timeTracking";
+import { convertDailyTaskToTasks } from "@/lib/task-converter";
 
 interface AnalyticsProps {
   categories: Category[];
@@ -18,6 +19,7 @@ interface AnalyticsProps {
 export function Analytics({ categories, selectedDate, activeView = "overview", onViewChange }: AnalyticsProps) {
   const { theme } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,19 +34,28 @@ export function Analytics({ categories, selectedDate, activeView = "overview", o
         const startDate = new Date(selectedDate);
         startDate.setDate(startDate.getDate() - 30);
         
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
+        // Format dates as YYYY-MM-DD without timezone issues
+        const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+        const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
         
-        const [tasksRes, goalsRes] = await Promise.all([
-          fetch(`/api/tasks?startDate=${startDateStr}&endDate=${endDateStr}`),
+        const [dailyTasksRes, goalsRes] = await Promise.all([
+          fetch(`/api/daily-tasks?startDate=${startDateStr}&endDate=${endDateStr}`),
           fetch('/api/goals')
         ]);
         
-        const tasksJson = await tasksRes.json();
+        const dailyTasksJson = await dailyTasksRes.json();
         const goalsJson = await goalsRes.json();
         
-        setTasks(tasksJson.data || []);
+        setDailyTasks(dailyTasksJson.data || []);
         setGoals(goalsJson.data || []);
+        
+        // Convert daily tasks to individual tasks for analytics compatibility
+        const allTasks: Task[] = [];
+        (dailyTasksJson.data || []).forEach((dailyTask: DailyTask) => {
+          const convertedTasks = convertDailyTaskToTasks(dailyTask);
+          allTasks.push(...convertedTasks);
+        });
+        setTasks(allTasks);
       } catch (error) {
         console.error('Error fetching analytics data:', error);
       } finally {
@@ -55,15 +66,16 @@ export function Analytics({ categories, selectedDate, activeView = "overview", o
     fetchAnalyticsData();
   }, [selectedDate]);
 
-  // Get tasks for the selected date
-  const selectedDateStr = selectedDate.toISOString().split('T')[0];
+  // Get tasks and daily record for the selected date
+  const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
   const todayTasks = tasks.filter(task => task.date === selectedDateStr);
+  const todayDailyTask = dailyTasks.find(dt => dt.date === selectedDateStr);
 
   // Get tasks for the past 7 days
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(selectedDate);
     date.setDate(selectedDate.getDate() - i);
-    return date.toISOString().split('T')[0];
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   });
 
   const weekTasks = tasks.filter(task => last7Days.includes(task.date));
@@ -117,7 +129,7 @@ export function Analytics({ categories, selectedDate, activeView = "overview", o
     }
   };
 
-  // Calculate well-being scores based on tasks
+  // Calculate well-being scores based on day-level tags
   const calculateWellBeingScores = () => {
     const scores = {
       mission: 0,
@@ -132,14 +144,27 @@ export function Analytics({ categories, selectedDate, activeView = "overview", o
       joy: 0,
     };
 
-    // Simple scoring based on task categories and well-being tags
-    todayTasks.forEach(task => {
-      task.wellBeingTags?.forEach(tag => {
-        const normalizedTag = tag.toLowerCase();
-        if (normalizedTag in scores) {
-          scores[normalizedTag as keyof typeof scores] += 1;
-        }
-      });
+    // Map incoming tag names to wheel keys
+    const tagKeyMap: Record<string, keyof typeof scores> = {
+      mission: 'mission',
+      money: 'money',
+      growth: 'growth',
+      physical: 'physical',
+      mental: 'mental',
+      spiritual: 'spiritual',
+      romance: 'romance',
+      friends: 'friends',
+      family: 'family',
+      joy: 'joy',
+      // Normalize legacy/alternate tags to wheel keys
+      social: 'friends',
+    };
+
+    // Use the day's well-being tags (set from the calendar day dialog)
+    todayDailyTask?.wellBeingTags?.forEach(tag => {
+      const normalizedTag = tag.toLowerCase();
+      const key = tagKeyMap[normalizedTag];
+      if (key) scores[key] += 1;
     });
 
     // Normalize scores to 0-10 scale

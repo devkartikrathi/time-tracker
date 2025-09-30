@@ -1,12 +1,12 @@
 "use client";
 
 import { useTheme } from "@/contexts/ThemeContext";
+import { useEffect, useMemo, useState } from "react";
 
 interface WellBeingWheelProps {
-  data?: {
-    [key: string]: number; // 0-10 scale for each aspect
-  };
+  data?: { [key: string]: number };
   size?: number;
+  selectedDate?: Date | string; // Optional, currently unused for aggregation
 }
 
 const wellBeingAspects = [
@@ -22,8 +22,60 @@ const wellBeingAspects = [
   { key: 'joy', label: 'Joy', color: '#10B981', angle: 324 },
 ];
 
-export function WellBeingWheel({ data = {}, size = 300 }: WellBeingWheelProps) {
+export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBeingWheelProps) {
   const { theme } = useTheme();
+  const [valuesState, setValuesState] = useState<Record<string, number> | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const dateStr = useMemo(() => {
+    if (typeof selectedDate === 'string' && selectedDate) return selectedDate;
+    const d = selectedDate instanceof Date ? selectedDate : new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [selectedDate]);
+
+  // Initialize from server daily_tasks.wellBeingTags (aggregate across ALL records)
+  useEffect(() => {
+    const fetchDaily = async () => {
+      try {
+        setLoading(true);
+        // No date filter: fetch all daily_tasks for this user
+        const res = await fetch(`/api/daily-tasks`);
+        const json = await res.json();
+        const rows: Array<{ wellBeingTags?: string[] }> = Array.isArray(json.data) ? json.data : [];
+
+        const counts: Record<string, number> = Object.fromEntries(
+          wellBeingAspects.map(a => [a.key, 0])
+        );
+        rows.forEach(row => {
+          (row.wellBeingTags || []).forEach(tag => {
+            const t = String(tag).toLowerCase();
+            const aspect = wellBeingAspects.find(a => a.key === t || (t === 'social' && a.key === 'friends'));
+            if (aspect) counts[aspect.key] = (counts[aspect.key] || 0) + 1;
+          });
+        });
+
+        // Use raw counts but clamp to 0-10 for rendering
+        const clamped: Record<string, number> = Object.fromEntries(
+          wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, counts[a.key] || 0))])
+        );
+
+        // If still zero across the board, fall back to provided data prop
+        const sum = Object.values(clamped).reduce((s, v) => s + v, 0);
+        setValuesState(sum > 0 ? clamped : Object.fromEntries(
+          wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, Number(data[a.key] || 0)))]))
+        );
+      } catch {
+        // If fetch fails, still render from provided data
+        const fallback: Record<string, number> = Object.fromEntries(
+          wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, Number(data[a.key] || 0)))])
+        );
+        setValuesState(fallback);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDaily();
+  }, [dateStr]);
   
   const centerX = size / 2;
   const centerY = size / 2;
@@ -52,8 +104,11 @@ export function WellBeingWheel({ data = {}, size = 300 }: WellBeingWheelProps) {
     return path;
   };
 
-  const values = wellBeingAspects.map(aspect => data[aspect.key] || 0);
+  const currentValues = valuesState || Object.fromEntries(wellBeingAspects.map(a => [a.key, Number(data[a.key] || 0)]));
+  const values = wellBeingAspects.map(aspect => currentValues[aspect.key] || 0);
   const pathData = createPath(values);
+
+  // Read-only: no setters or save function
 
   return (
     <div className="flex flex-col items-center space-y-6">
@@ -150,7 +205,7 @@ export function WellBeingWheel({ data = {}, size = 300 }: WellBeingWheelProps) {
         </svg>
       </div>
       
-      {/* Legend */}
+      {/* Read-only legend: shows clamped counts per aspect aggregated from DB */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         {wellBeingAspects.map((aspect) => (
           <div key={aspect.key} className="flex items-center space-x-2">
@@ -159,7 +214,7 @@ export function WellBeingWheel({ data = {}, size = 300 }: WellBeingWheelProps) {
               style={{ backgroundColor: aspect.color }}
             />
             <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
-              {aspect.label}: {data[aspect.key] || 0}/10
+              {aspect.label}: {valuesState ? valuesState[aspect.key] || 0 : 0}/10
             </span>
           </div>
         ))}

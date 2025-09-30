@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// import { Progress } from "@/components/ui/progress";
 import { CircleCheck as CheckCircle, Clock, CircleAlert as AlertCircle, Plus, Pencil, Trash2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { Task, Category, Goal } from "@/types/timeTracking";
+import type { Task, Category, Goal, DailyTask } from "@/types/timeTracking";
+import { convertDailyTaskToTasks } from "@/lib/task-converter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,36 +20,42 @@ interface GoalsTrackingProps {
 export function GoalsTracking({ categories, selectedDate }: GoalsTrackingProps) {
   const { theme } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<null | { mode: 'create' } | { mode: 'edit', goal: Goal }>(null);
   const [form, setForm] = useState<{ name: string; targetHours: string; category: string; subcategoryId: string }>({ name: '', targetHours: '1', category: '', subcategoryId: '' });
+
+  // Selected date in YYYY-MM-DD format for daily computations
+  const selectedDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
   // Fetch goals and tasks data from database
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        // Fetch only the selected day's records for daily goal calculation
+        const startDateStr = selectedDateStr;
+        const endDateStr = selectedDateStr;
         
-        // Get tasks for the current month for goal progress calculation
-        const year = selectedDate.getFullYear();
-        const month = selectedDate.getMonth();
-        const startDate = new Date(year, month, 1);
-        const endDate = new Date(year, month + 1, 0);
-        
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
-        
-        const [tasksRes, goalsRes] = await Promise.all([
-          fetch(`/api/tasks?startDate=${startDateStr}&endDate=${endDateStr}`),
+        const [dailyTasksRes, goalsRes] = await Promise.all([
+          fetch(`/api/daily-tasks?startDate=${startDateStr}&endDate=${endDateStr}`),
           fetch('/api/goals')
         ]);
         
-        const tasksJson = await tasksRes.json();
+        const dailyTasksJson = await dailyTasksRes.json();
         const goalsJson = await goalsRes.json();
         
-        setTasks(tasksJson.data || []);
+        setDailyTasks(dailyTasksJson.data || []);
         setGoals(goalsJson.data || []);
+        
+        // Convert daily task to individual tasks for goals compatibility
+        const allTasks: Task[] = [];
+        (dailyTasksJson.data || []).forEach((dailyTask: DailyTask) => {
+          const convertedTasks = convertDailyTaskToTasks(dailyTask);
+          allTasks.push(...convertedTasks);
+        });
+        setTasks(allTasks);
       } catch (error) {
         console.error('Error fetching goals data:', error);
       } finally {
@@ -58,7 +64,7 @@ export function GoalsTracking({ categories, selectedDate }: GoalsTrackingProps) 
     };
     
     fetchData();
-  }, [selectedDate]);
+  }, [selectedDate, selectedDateStr]);
 
   const startCreate = () => {
     const firstCategory = categories[0];
@@ -121,8 +127,9 @@ export function GoalsTracking({ categories, selectedDate }: GoalsTrackingProps) 
     }
   };
   const getGoalProgress = (goal: Goal) => {
+    // Only count tasks for the selected day and matching category/subcategory
     const relevantTasks = tasks.filter(task => {
-      return task.category === goal.category && task.subcategoryId === goal.subcategoryId;
+      return task.date === selectedDateStr && task.category === goal.category && task.subcategoryId === goal.subcategoryId;
     });
 
     const currentHours = relevantTasks.length;

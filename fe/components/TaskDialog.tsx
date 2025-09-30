@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+ 
 import { Trash2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { Task, Category, WellBeingTag } from "@/types/timeTracking";
+import type { Task, Category } from "@/types/timeTracking";
 
 interface TaskDialogProps {
   hour: number;
@@ -21,10 +21,7 @@ interface TaskDialogProps {
   selectedCount?: number;
 }
 
-const wellBeingOptions: WellBeingTag[] = [
-  'Physical', 'Mental', 'Social', 'Spiritual', 'Growth', 
-  'Family', 'Mission', 'Money', 'Romance', 'Friends', 'Joy'
-];
+ 
 
 export function TaskDialog({
   hour,
@@ -39,9 +36,7 @@ export function TaskDialog({
   const { theme } = useTheme();
   const [selectedCategory, setSelectedCategory] = useState(existingTask?.category || '');
   const [selectedSubcategory, setSelectedSubcategory] = useState(existingTask?.subcategoryId || '');
-  const [selectedWellBeingTags, setSelectedWellBeingTags] = useState<WellBeingTag[]>(
-    existingTask?.wellBeingTags || []
-  );
+  
 
   const formatHour = (hour: number) => {
     if (hour === 0) return "12:00 AM";
@@ -72,18 +67,10 @@ export function TaskDialog({
       taskName: subcategory.name, // Use subcategory name as task name
       category: selectedCategory as any,
       subcategoryId: selectedSubcategory,
-      wellBeingTags: selectedWellBeingTags,
       duration: 1
     });
   };
-
-  const toggleWellBeingTag = (tag: WellBeingTag) => {
-    setSelectedWellBeingTags(prev => 
-      prev.includes(tag) 
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    );
-  };
+ 
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -159,31 +146,7 @@ export function TaskDialog({
             </div>
           )}
 
-          <div className="space-y-3">
-            <Label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-              Well-being Tags (Optional)
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              {wellBeingOptions.map(tag => (
-                <Badge
-                  key={tag}
-                  variant={selectedWellBeingTags.includes(tag) ? "default" : "outline"}
-                  className={`cursor-pointer transition-all duration-200 text-xs ${
-                    selectedWellBeingTags.includes(tag)
-                      ? theme === 'dark' 
-                        ? "bg-blue-600 text-white hover:bg-blue-700" 
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                      : theme === 'dark'
-                        ? "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
-                        : "border-gray-300 text-gray-600 hover:bg-gray-100 hover:border-gray-400"
-                  }`}
-                  onClick={() => toggleWellBeingTag(tag)}
-                >
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </div>
+          
         </div>
 
         <div className="flex justify-between">
