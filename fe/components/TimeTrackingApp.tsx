@@ -7,12 +7,11 @@ import { Analytics } from "./Analytics";
 import { CategorySetup } from "./CategorySetup";
 import { GoalsTracking } from "./GoalsTracking";
 import { Navbar } from "./Navbar";
-import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Task, Category, Goal, WellBeingTag, DailyTask } from "@/types/timeTracking";
 import { CATEGORY_LIST } from "@/lib/constants";
 import { convertDailyTaskToTasks } from "@/lib/task-converter";
+import { toast } from "sonner";
 
 // Use constants for categories
 const defaultCategories: Category[] = CATEGORY_LIST.map(cat => ({
@@ -42,6 +41,11 @@ export function TimeTrackingApp() {
           fetch('/api/subcategories'),
           fetch('/api/goals')
         ]);
+        
+        if (!subcatsRes.ok || !goalsRes.ok) {
+          throw new Error('Failed to load data');
+        }
+        
         const subcatsJson = await subcatsRes.json();
         const goalsJson = await goalsRes.json();
         
@@ -54,7 +58,10 @@ export function TimeTrackingApp() {
         
         setCategories(categoriesWithSubs);
         setGoals(goalsJson.data || []);
-      } catch {}
+      } catch (error) {
+        console.error('Error loading categories and goals:', error);
+        toast.error('Failed to load categories and goals. Please refresh the page.');
+      }
     };
     load();
   }, []);
@@ -76,6 +83,11 @@ export function TimeTrackingApp() {
           
           // Load daily tasks (new optimized format)
           const dailyTasksRes = await fetch(`/api/daily-tasks?startDate=${startDateStr}&endDate=${endDateStr}`);
+          
+          if (!dailyTasksRes.ok) {
+            throw new Error('Failed to load daily tasks');
+          }
+          
           const dailyTasksJson = await dailyTasksRes.json();
           setDailyTasks(dailyTasksJson.data || []);
           
@@ -90,6 +102,11 @@ export function TimeTrackingApp() {
           // For other views, load daily tasks for the specific date
           const date = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
           const dailyTasksRes = await fetch(`/api/daily-tasks?date=${date}`);
+          
+          if (!dailyTasksRes.ok) {
+            throw new Error('Failed to load daily tasks');
+          }
+          
           const dailyTasksJson = await dailyTasksRes.json();
           setDailyTasks(dailyTasksJson.data || []);
           
@@ -101,7 +118,10 @@ export function TimeTrackingApp() {
           });
           setTasks(allTasks);
         }
-      } catch {}
+      } catch (error) {
+        console.error('Error loading tasks:', error);
+        toast.error('Failed to load tasks. Please try again.');
+      }
     };
     loadTasks();
   }, [selectedDate, activeTab]);
@@ -123,26 +143,34 @@ export function TimeTrackingApp() {
         })
       });
       
-      if (response.ok) {
-        const result = await response.json();
-        const savedDailyTask = result.data;
-        
-        // Update local state immediately for faster UI response
-        setDailyTasks(prev => {
-          const existingIndex = prev.findIndex(dt => dt.date === savedDailyTask.date);
-          
-          if (existingIndex >= 0) {
-            // Update existing daily task
-            const updated = [...prev];
-            updated[existingIndex] = savedDailyTask;
-            return updated;
-          } else {
-            // Add new daily task
-            return [...prev, savedDailyTask].sort((a, b) => a.date.localeCompare(b.date));
-          }
-        });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update task');
       }
-    } catch {}
+      
+      const result = await response.json();
+      const savedDailyTask = result.data;
+      
+      // Update local state immediately for faster UI response
+      setDailyTasks(prev => {
+        const existingIndex = prev.findIndex(dt => dt.date === savedDailyTask.date);
+        
+        if (existingIndex >= 0) {
+          // Update existing daily task
+          const updated = [...prev];
+          updated[existingIndex] = savedDailyTask;
+          return updated;
+        } else {
+          // Add new daily task
+          return [...prev, savedDailyTask].sort((a, b) => a.date.localeCompare(b.date));
+        }
+      });
+      
+      toast.success('Task updated successfully!');
+    } catch (error) {
+      console.error('Error updating task:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update task. Please try again.');
+    }
   };
 
   // Legacy function for backward compatibility - no longer used
@@ -154,6 +182,11 @@ export function TimeTrackingApp() {
     // Re-fetch subcategories from server and rebuild categories
     try {
       const res = await fetch('/api/subcategories');
+      
+      if (!res.ok) {
+        throw new Error('Failed to fetch categories');
+      }
+      
       const json = await res.json();
       
       // Group subcategories by category
@@ -164,7 +197,11 @@ export function TimeTrackingApp() {
       }));
       
       setCategories(categoriesWithSubs);
-    } catch {}
+      toast.success('Categories updated successfully!');
+    } catch (error) {
+      console.error('Error updating categories:', error);
+      toast.error('Failed to update categories. Please try again.');
+    }
   };
 
 

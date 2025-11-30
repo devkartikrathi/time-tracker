@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 interface WellBeingWheelProps {
   data?: { [key: string]: number };
   size?: number;
-  selectedDate?: Date | string; // Optional, currently unused for aggregation
+  selectedDate?: Date | string; 
 }
 
 const wellBeingAspects = [
@@ -33,12 +33,10 @@ export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBein
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, [selectedDate]);
 
-  // Initialize from server daily_tasks.wellBeingTags (aggregate across ALL records)
   useEffect(() => {
     const fetchDaily = async () => {
       try {
         setLoading(true);
-        // No date filter: fetch all daily_tasks for this user
         const res = await fetch(`/api/daily-tasks`);
         const json = await res.json();
         const rows: Array<{ wellBeingTags?: string[] }> = Array.isArray(json.data) ? json.data : [];
@@ -46,6 +44,7 @@ export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBein
         const counts: Record<string, number> = Object.fromEntries(
           wellBeingAspects.map(a => [a.key, 0])
         );
+        
         rows.forEach(row => {
           (row.wellBeingTags || []).forEach(tag => {
             const t = String(tag).toLowerCase();
@@ -54,18 +53,29 @@ export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBein
           });
         });
 
-        // Use raw counts but clamp to 0-10 for rendering
-        const clamped: Record<string, number> = Object.fromEntries(
-          wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, counts[a.key] || 0))])
-        );
+        // Calculate total count across all aspects
+        const totalCount = Object.values(counts).reduce((sum, val) => sum + val, 0);
 
-        // If still zero across the board, fall back to provided data prop
-        const sum = Object.values(clamped).reduce((s, v) => s + v, 0);
-        setValuesState(sum > 0 ? clamped : Object.fromEntries(
-          wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, Number(data[a.key] || 0)))]))
-        );
+        // Convert to percentage-based scores (0-10 scale)
+        // If total is zero, all values are 0
+        const percentageBased: Record<string, number> = {};
+        if (totalCount > 0) {
+          wellBeingAspects.forEach(aspect => {
+            const percentage = (counts[aspect.key] / totalCount) * 100;
+            // Scale to 0-10 range for better visualization
+            percentageBased[aspect.key] = Math.min(10, percentage / 10);
+          });
+        } else {
+          wellBeingAspects.forEach(aspect => {
+            percentageBased[aspect.key] = 0;
+          });
+        }
+
+        const sum = Object.values(percentageBased).reduce((s, v) => s + v, 0);
+        setValuesState(sum > 0 ? percentageBased : Object.fromEntries(
+          wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, Number(data[a.key] || 0)))])
+        ));
       } catch {
-        // If fetch fails, still render from provided data
         const fallback: Record<string, number> = Object.fromEntries(
           wellBeingAspects.map(a => [a.key, Math.max(0, Math.min(10, Number(data[a.key] || 0)))])
         );
@@ -107,8 +117,6 @@ export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBein
   const currentValues = valuesState || Object.fromEntries(wellBeingAspects.map(a => [a.key, Number(data[a.key] || 0)]));
   const values = wellBeingAspects.map(aspect => currentValues[aspect.key] || 0);
   const pathData = createPath(values);
-
-  // Read-only: no setters or save function
 
   return (
     <div className="flex flex-col items-center space-y-6">
@@ -194,9 +202,8 @@ export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBein
                 y={labelPoint.y}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                className={`text-xs font-medium ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                }`}
+                fill={theme === 'dark' ? '#D1D5DB' : '#374151'}
+                className="text-xs font-medium"
               >
                 {aspect.label}
               </text>
@@ -205,19 +212,23 @@ export function WellBeingWheel({ data = {}, size = 300, selectedDate }: WellBein
         </svg>
       </div>
       
-      {/* Read-only legend: shows clamped counts per aspect aggregated from DB */}
+      {/* Legend: shows relative distribution */}
       <div className="grid grid-cols-2 gap-2 text-xs">
-        {wellBeingAspects.map((aspect) => (
-          <div key={aspect.key} className="flex items-center space-x-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: aspect.color }}
-            />
-            <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
-              {aspect.label}: {valuesState ? valuesState[aspect.key] || 0 : 0}/10
-            </span>
-          </div>
-        ))}
+        {wellBeingAspects.map((aspect) => {
+          const value = valuesState ? valuesState[aspect.key] || 0 : 0;
+          const displayValue = value.toFixed(1);
+          return (
+            <div key={aspect.key} className="flex items-center space-x-2">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: aspect.color }}
+              />
+              <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
+                {aspect.label}: {displayValue}/10
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

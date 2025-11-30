@@ -375,7 +375,11 @@ export function MonthlyGrid({
                     key={`${day}-${hour}`}
                     onClick={(e) => handleCellClick(day, hour, e)}
                     onMouseDown={(e) => handleCellMouseDown(day, hour, e)}
-                    className={`w-6 sm:w-8 h-6 sm:h-8 border-l border-b border-gray-200/60 dark:border-gray-700/60 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-all duration-200 ${
+                    className={`w-6 sm:w-8 h-6 sm:h-8 border-l border-b transition-all duration-200 ${
+                      theme === 'dark' 
+                        ? 'border-gray-700/60 hover:bg-gray-700/50' 
+                        : 'border-gray-200/60 hover:bg-gray-100/50'
+                    } ${
                       task ? 'shadow-md hover:shadow-lg' : 'hover:shadow-sm'
                     } ${
                       isSelected ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
@@ -385,7 +389,9 @@ export function MonthlyGrid({
                         ? (subcategory?.color || category?.color || 'transparent')
                         : isSelected 
                           ? 'rgba(59, 130, 246, 0.1)'
-                          : 'rgba(249, 250, 251, 0.5)' // Light background for empty cells
+                          : theme === 'dark'
+                            ? 'rgba(17, 24, 39, 0.5)' // Darker background for empty cells in dark mode
+                            : 'rgba(249, 250, 251, 0.5)' // Light background for empty cells in light mode
                     }}
                     title={task ? `${category?.name || 'Unknown'}: ${task.taskName}` : `Day ${day}, Hour ${hour}${isSelected ? ' (Selected)' : ''}`}
                   />
