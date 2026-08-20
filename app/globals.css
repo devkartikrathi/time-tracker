@@ -1,0 +1,253 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+   Design tokens
+
+   The chrome is deliberately neutral. Every hour cell in this app is painted
+   with a user-chosen category colour, so a grid is already dense with hue —
+   any accent in the surrounding UI competes with the data for attention.
+   One accent, neutral surfaces, and the data supplies the colour.
+--------------------------------------------------------------------------- */
+
+:root {
+  --radius: 0.75rem;
+
+  /* Surfaces, light */
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.17 0.006 285);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.006 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.006 285);
+  --primary: oklch(0.21 0.006 285);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.967 0.001 286);
+  --secondary-foreground: oklch(0.21 0.006 285);
+  --muted: oklch(0.967 0.001 286);
+  --muted-foreground: oklch(0.552 0.014 285);
+  --accent: oklch(0.967 0.001 286);
+  --accent-foreground: oklch(0.21 0.006 285);
+  --destructive: oklch(0.577 0.245 27.3);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.92 0.004 286);
+  --input: oklch(0.92 0.004 286);
+  --ring: oklch(0.71 0.016 286);
+
+  /* The single interactive accent */
+  --brand: oklch(0.58 0.21 277);
+  --brand-foreground: oklch(0.99 0 0);
+  --brand-muted: oklch(0.96 0.02 277);
+
+  /* Empty hour cell — reads as "unfilled", never as a category */
+  --cell-empty: oklch(0.955 0.002 286);
+  --cell-empty-border: oklch(0.91 0.004 286);
+
+  /* Category anchors, used for rollups (summary bar, stacked charts).
+     Individual activities draw from the 8-slot palette in lib/categories.ts —
+     one hue cannot supply more than ~3 separable shades. */
+  --cat-rest: #2a78d6;
+  --cat-work: #1baf7a;
+  --cat-other: #eb6834;
+
+  --success: oklch(0.65 0.17 156);
+  --warning: oklch(0.76 0.16 76);
+
+  /* Chart ramp, used by analytics when a series is not category-bound */
+  --chart-1: oklch(0.58 0.21 277);
+  --chart-2: oklch(0.68 0.16 158);
+  --chart-3: oklch(0.74 0.15 68);
+  --chart-4: oklch(0.64 0.19 12);
+  --chart-5: oklch(0.66 0.14 220);
+}
+
+.dark {
+  /* Near-black rather than pure #000: on OLED the cell borders and elevation
+     steps disappear entirely against true black. */
+  --background: oklch(0.145 0.004 286);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.185 0.005 286);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.205 0.005 286);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.97 0 0);
+  --primary-foreground: oklch(0.21 0.006 285);
+  --secondary: oklch(0.26 0.006 286);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.26 0.006 286);
+  --muted-foreground: oklch(0.706 0.015 286);
+  --accent: oklch(0.26 0.006 286);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.65 0.21 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.55 0.012 286);
+
+  --brand: oklch(0.68 0.19 277);
+  --brand-foreground: oklch(0.15 0.004 286);
+  --brand-muted: oklch(0.28 0.06 277);
+
+  --cell-empty: oklch(0.225 0.005 286);
+  --cell-empty-border: oklch(1 0 0 / 8%);
+
+  --cat-rest: #3987e5;
+  --cat-work: #199e70;
+  --cat-other: #d95926;
+
+  --success: oklch(0.72 0.18 156);
+  --warning: oklch(0.8 0.16 76);
+
+  --chart-1: oklch(0.68 0.19 277);
+  --chart-2: oklch(0.72 0.17 158);
+  --chart-3: oklch(0.78 0.15 68);
+  --chart-4: oklch(0.7 0.19 12);
+  --chart-5: oklch(0.72 0.14 220);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-muted: var(--brand-muted);
+  --color-cell-empty: var(--cell-empty);
+  --color-cell-empty-border: var(--cell-empty-border);
+  --color-cat-rest: var(--cat-rest);
+  --color-cat-work: var(--cat-work);
+  --color-cat-other: var(--cat-other);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Safe-area aware spacing for iOS notch and home indicator */
+  --spacing-safe-top: env(safe-area-inset-top);
+  --spacing-safe-bottom: env(safe-area-inset-bottom);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    /* Prevents the address bar collapse from causing layout jump on mobile */
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* Stops the whole page rubber-banding when a scroller hits its end */
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Removes the grey flash on tap in mobile Safari and Chrome */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS zooms the viewport when focusing an input under 16px */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+  .h-dvh {
+    height: 100dvh;
+  }
+  .min-h-dvh {
+    min-height: 100dvh;
+  }
+
+  /* Horizontal scrollers that snap — used by the day strip and month pager */
+  .snap-x-mandatory {
+    scroll-snap-type: x mandatory;
+  }
+  .snap-start-always {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Disables text selection during a drag-paint gesture on the grid */
+  .touch-none-select-none {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* Keeps the number input spinners out of the mood / hour steppers */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
