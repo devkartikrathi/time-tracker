@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 import { getCurrentUser } from '@/lib/auth'
+import { AppProviders } from '@/components/app/app-providers'
 
 /** Onboarding needs a session, and is skipped once it has been completed. */
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
@@ -10,5 +11,5 @@ export default async function OnboardingLayout({ children }: { children: React.R
     const user = await getCurrentUser()
     if (user?.onboardingCompleted) redirect('/app')
 
-    return children
+    return <AppProviders>{children}</AppProviders>
 }

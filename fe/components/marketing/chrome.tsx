@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/app/app-header'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export function Logo({ className }: { className?: string }) {
     return (

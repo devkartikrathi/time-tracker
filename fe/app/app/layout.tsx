@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
+import { AppProviders } from '@/components/app/app-providers'
 import { AppShell } from '@/components/app/app-shell'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -21,5 +22,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (!user) redirect('/sign-in')
     if (!user.onboardingCompleted) redirect('/onboarding')
 
-    return <AppShell>{children}</AppShell>
+    return (
+        <AppProviders>
+            <AppShell>{children}</AppShell>
+        </AppProviders>
+    )
 }

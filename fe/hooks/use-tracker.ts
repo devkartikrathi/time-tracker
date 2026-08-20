@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api, ApiError, type SaveDayResult } from '@/lib/api-client'
 import { ACHIEVEMENTS_BY_KEY } from '@/lib/achievements'
-import { monthBounds, toDayKey, type DayKey } from '@/lib/date'
+import { addDayKey, monthBounds, todayKey, toDayKey, type DayKey } from '@/lib/date'
 import { haptic } from '@/lib/utils'
 import type { Category, DailyTask, HourData, HourSlots, Subcategory } from '@/types'
 import { CATEGORY_LIST } from '@/lib/categories'
@@ -43,6 +43,25 @@ export function useGoals() {
 /** Days for a month, keyed by the month's bounds so navigation caches per month. */
 export function useMonthDays(anchor: Date) {
     const { startKey, endKey } = useMemo(() => monthBounds(anchor), [anchor])
+
+    return useQuery({
+        queryKey: queryKeys.days(startKey, endKey),
+        queryFn: () => api.getDays({ startDate: startKey, endDate: endKey }),
+        staleTime: 30_000,
+        placeholderData: (previous) => previous,
+    })
+}
+
+/**
+ * Days over an arbitrary trailing window.
+ *
+ * Insights and multi-day goals must not be scoped to the calendar month: on the
+ * 3rd, a 14-day trend or a weekly goal drawn from month-only data would be
+ * mostly empty and silently wrong.
+ */
+export function useTrailingDays(days: number) {
+    const endKey = todayKey()
+    const startKey = addDayKey(endKey, -(days - 1))
 
     return useQuery({
         queryKey: queryKeys.days(startKey, endKey),
@@ -129,6 +148,9 @@ export function useSaveDay(anchor: Date) {
             // Streak and achievement state changed server-side.
             queryClient.invalidateQueries({ queryKey: queryKeys.user })
             queryClient.invalidateQueries({ queryKey: ['insights'] })
+            // Other windows over the same days (the Insights and Goals pages
+            // use trailing ranges, not this month) would otherwise stay stale.
+            queryClient.invalidateQueries({ queryKey: ['days'] })
 
             for (const unlocked of result.progress.newAchievements) {
                 const def = ACHIEVEMENTS_BY_KEY.get(unlocked)

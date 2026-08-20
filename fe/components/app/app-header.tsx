@@ -1,12 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useTheme } from 'next-themes'
-import { Flame, Moon, Sun } from 'lucide-react'
+import { Flame } from 'lucide-react'
 import { UserButton } from '@clerk/nextjs'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useIsClient } from '@/hooks/use-is-client'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 interface AppHeaderProps {
     streak?: number
@@ -61,29 +59,5 @@ export function AppHeader({ streak = 0, streakAtRisk = false }: AppHeaderProps) 
                 </div>
             </div>
         </header>
-    )
-}
-
-export function ThemeToggle() {
-    const { resolvedTheme, setTheme } = useTheme()
-    // The server cannot know the user's theme, so the icon only renders once
-    // hydrated — otherwise it mismatches on the server pass.
-    const mounted = useIsClient()
-
-    return (
-        <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={
-                mounted ? `Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode` : 'Toggle theme'
-            }
-            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-        >
-            {mounted && resolvedTheme === 'dark' ? (
-                <Sun className="size-4" />
-            ) : (
-                <Moon className="size-4" />
-            )}
-        </Button>
     )
 }

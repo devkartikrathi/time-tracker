@@ -34,7 +34,7 @@ import {
 } from '@/components/app/charts'
 import { GoalsPanel } from '@/components/app/goals-panel'
 import { api, type InsightsResult } from '@/lib/api-client'
-import { queryKeys, useMonthDays, useSubcategories } from '@/hooks/use-tracker'
+import { queryKeys, useSubcategories, useTrailingDays } from '@/hooks/use-tracker'
 import { breakdownBySubcategory, dailySeries, hourProfile, wellBeingCounts } from '@/lib/stats'
 import { lastNDays } from '@/lib/date'
 import { cn } from '@/lib/utils'
@@ -62,9 +62,10 @@ const ICONS: Record<string, typeof Lightbulb> = {
 
 export default function InsightsPage() {
     const [useAi, setUseAi] = useState(false)
-    const anchor = useMemo(() => new Date(), [])
 
-    const { data: days = [] } = useMonthDays(anchor)
+    // A trailing window, not the calendar month — the charts below look back
+    // 14 days and the hour profile wants as much history as it can get.
+    const { data: days = [] } = useTrailingDays(45)
     const { data: subcategories = [] } = useSubcategories()
 
     const { data, isLoading } = useQuery<InsightsResult>({
@@ -145,7 +146,7 @@ export default function InsightsPage() {
             {breakdown.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-sm">Top activities this month</CardTitle>
+                        <CardTitle className="text-sm">Top activities recently</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <ActivityBars items={breakdown} />

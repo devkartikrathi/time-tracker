@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Target, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,7 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { api, ApiError } from '@/lib/api-client'
-import { queryKeys, useGoals, useMonthDays, useSubcategories } from '@/hooks/use-tracker'
+import { queryKeys, useGoals, useSubcategories, useTrailingDays } from '@/hooks/use-tracker'
 import { goalProgress } from '@/lib/stats'
 import { todayKey } from '@/lib/date'
 import { useChartTheme } from '@/hooks/use-chart-theme'
@@ -25,10 +25,11 @@ import type { GoalPeriod } from '@/types'
 export function GoalsPanel() {
     const theme = useChartTheme()
     const queryClient = useQueryClient()
-    const anchor = useMemo(() => new Date(), [])
 
+    // 31 days covers the longest goal period, and unlike a calendar month it
+    // stays correct across a month boundary.
     const { data: goals = [] } = useGoals()
-    const { data: days = [] } = useMonthDays(anchor)
+    const { data: days = [] } = useTrailingDays(31)
     const { data: subcategories = [] } = useSubcategories()
 
     const [adding, setAdding] = useState(false)
