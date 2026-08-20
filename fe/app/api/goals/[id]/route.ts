@@ -1,51 +1,56 @@
-import { NextResponse } from 'next/server'
-import { getDatabaseUserId } from '@/lib/user-init'
-import { getCategoryEnum } from '@/lib/constants'
+import { requireUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { fail, handleRouteError, ok } from '@/lib/api-response'
+import { updateGoalSchema } from '@/lib/validation'
 
-// Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+type Params = { params: Promise<{ id: string }> }
+
+export async function PATCH(req: Request, { params }: Params) {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+        const { id } = await params
+        const body = updateGoalSchema.parse(await req.json())
 
-        const body = await req.json()
-        const { name, targetHours, category, subcategoryId, isActive } = body
+        const existing = await prisma.goal.findFirst({ where: { id, userId: user.id } })
+        if (!existing) return fail('Goal not found', 404)
 
-        if (!subcategoryId) {
-            return NextResponse.json({ error: 'Subcategory is required for goals' }, { status: 400 })
+        if (body.subcategoryId) {
+            const owned = await prisma.subcategory.findFirst({
+                where: { id: body.subcategoryId, userId: user.id },
+            })
+            if (!owned) return fail('Pick one of your own activities', 400)
         }
 
         const updated = await prisma.goal.update({
-            where: { id: params.id },
+            where: { id },
             data: {
-                name,
-                targetHours,
-                category: getCategoryEnum(category),
-                subcategoryId,
-                isActive
-            }
+                ...(body.name !== undefined ? { name: body.name } : {}),
+                ...(body.targetHours !== undefined ? { targetHours: body.targetHours } : {}),
+                ...(body.period !== undefined ? { period: body.period } : {}),
+                ...(body.subcategoryId !== undefined ? { subcategoryId: body.subcategoryId } : {}),
+                ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
+            },
         })
-        return NextResponse.json({ data: updated })
+
+        return ok(updated)
     } catch (error) {
-        console.error('Error updating goal:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'PATCH /api/goals/[id]')
     }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: Params) {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+        const { id } = await params
 
-        await prisma.goal.delete({ where: { id: params.id } })
-        return NextResponse.json({ ok: true })
+        const deleted = await prisma.goal.deleteMany({ where: { id, userId: user.id } })
+        if (deleted.count === 0) return fail('Goal not found', 404)
+
+        return ok({ deleted: true })
     } catch (error) {
-        console.error('Error deleting goal:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'DELETE /api/goals/[id]')
     }
 }
-
-

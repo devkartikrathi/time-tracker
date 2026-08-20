@@ -1,195 +1,132 @@
-import { NextResponse } from 'next/server'
-import { initializeUser } from '@/lib/user-init'
+import { requireUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { fail, handleRouteError, ok, rateLimit } from '@/lib/api-response'
+import { dateRangeQuerySchema, upsertDailyTaskSchema } from '@/lib/validation'
+import { refreshProgress } from '@/lib/progress'
+import { limitsFor } from '@/lib/plan'
+import { addDayKey, todayKey } from '@/lib/date'
+import type { Prisma } from '@/prisma/generated/prisma/client'
+import type { HourSlots } from '@/types'
 
-// Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// GET daily tasks for a date range
 export async function GET(req: Request) {
     try {
-        // Initialize user to ensure they exist in the database
-        const user = await initializeUser()
-        if (!user) {
-            console.error('GET /api/daily-tasks: User not authenticated')
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const userId = user.id
+        const user = await requireUser()
         const url = new URL(req.url)
-        const date = url.searchParams.get('date') || ''
-        const startDate = url.searchParams.get('startDate') || ''
-        const endDate = url.searchParams.get('endDate') || ''
 
-        let whereClause: any = { userId }
+        const query = dateRangeQuerySchema.parse({
+            date: url.searchParams.get('date') || undefined,
+            startDate: url.searchParams.get('startDate') || undefined,
+            endDate: url.searchParams.get('endDate') || undefined,
+        })
 
-        if (startDate && endDate) {
-            // Date range query for MonthlyGrid
-            whereClause.date = {
-                gte: startDate,
-                lte: endDate
-            }
-            console.log(`Fetching daily tasks for user ${userId} from ${startDate} to ${endDate}`)
-        } else if (date) {
-            // Single date query
-            whereClause.date = date
-            console.log(`Fetching daily task for user ${userId} on ${date}`)
-        } else {
-            console.log(`Fetching all daily tasks for user ${userId}`)
+        // Free accounts read a bounded window of history. The clamp happens
+        // here rather than in the UI so the limit cannot be bypassed by
+        // crafting a request.
+        const limits = limitsFor(user.plan)
+        const earliest = Number.isFinite(limits.historyDays)
+            ? addDayKey(todayKey(), -limits.historyDays)
+            : null
+
+        const where = {
+            userId: user.id,
+            ...(query.date
+                ? { date: earliest && query.date < earliest ? '__blocked__' : query.date }
+                : query.startDate && query.endDate
+                  ? {
+                        date: {
+                            gte: earliest && query.startDate < earliest ? earliest : query.startDate,
+                            lte: query.endDate,
+                        },
+                    }
+                  : earliest
+                    ? { date: { gte: earliest } }
+                    : {}),
         }
 
         const dailyTasks = await prisma.dailyTask.findMany({
-            where: whereClause,
-            orderBy: { date: 'asc' }
+            where,
+            orderBy: { date: 'asc' },
         })
 
-        return NextResponse.json({ data: dailyTasks })
+        return ok(dailyTasks)
     } catch (error) {
-        console.error('Error fetching daily tasks:', error)
-
-        if (process.env.NODE_ENV === 'development') {
-            return NextResponse.json({
-                error: 'Server error',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            }, { status: 500 })
-        }
-
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'GET /api/daily-tasks')
     }
 }
 
-// POST/CREATE daily task
-export async function POST(req: Request) {
-    try {
-        // Initialize user to ensure they exist in the database
-        const user = await initializeUser()
-        if (!user) {
-            console.error('POST /api/daily-tasks: User not authenticated')
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const userId = user.id
-        const body = await req.json()
-        const { date, hours, wellBeingTags = [] } = body
-
-        // Validate required fields
-        if (!date) {
-            console.error('POST /api/daily-tasks: Missing required field - date')
-            return NextResponse.json({ error: 'Date is required' }, { status: 400 })
-        }
-
-        // Initialize hours array with 24 null values if not provided
-        const hoursArray = hours || Array(24).fill(null)
-
-        // Validate hours array
-        if (!Array.isArray(hoursArray) || hoursArray.length !== 24) {
-            console.error('POST /api/daily-tasks: Invalid hours array length')
-            return NextResponse.json({ error: 'Hours must be an array of 24 elements' }, { status: 400 })
-        }
-
-        const created = await prisma.dailyTask.create({
-            data: {
-                userId,
-                date,
-                hours: hoursArray,
-                wellBeingTags
-            }
-        })
-
-        console.log(`Created daily task for user ${userId} on ${date}`)
-        return NextResponse.json({ data: created })
-    } catch (error) {
-        console.error('Error creating daily task:', error)
-
-        if (process.env.NODE_ENV === 'development') {
-            return NextResponse.json({
-                error: 'Server error',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            }, { status: 500 })
-        }
-
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
-    }
-}
-
-// PUT/UPDATE daily task
+/**
+ * Upsert a day. This is the app's hot path — every cell tap lands here — so it
+ * is a single atomic upsert rather than the previous find-then-update-or-create,
+ * which could race two rapid taps into a unique-constraint error.
+ */
 export async function PUT(req: Request) {
     try {
-        // Initialize user to ensure they exist in the database
-        const user = await initializeUser()
-        if (!user) {
-            console.error('PUT /api/daily-tasks: User not authenticated')
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+
+        if (!rateLimit(`daily-tasks:${user.id}`, 120)) {
+            return fail('Slow down a moment', 429)
         }
 
-        const userId = user.id
+        const body = upsertDailyTaskSchema.parse(await req.json())
 
-        const body = await req.json()
-        const { date, hours, wellBeingTags } = body
+        // Strip the denormalised subcategory before persisting so renaming an
+        // activity is reflected everywhere instead of leaving stale copies.
+        const hours = body.hours.map((hour) =>
+            hour
+                ? {
+                      taskName: hour.taskName,
+                      category: hour.category,
+                      subcategoryId: hour.subcategoryId,
+                  }
+                : null
+        ) satisfies HourSlots as unknown as Prisma.InputJsonValue
 
-        // Validate required fields
-        if (!date) {
-            console.error('PUT /api/daily-tasks: Missing required field - date')
-            return NextResponse.json({ error: 'Date is required' }, { status: 400 })
-        }
-
-        if (!hours || !Array.isArray(hours)) {
-            console.error('PUT /api/daily-tasks: Invalid hours data')
-            return NextResponse.json({ error: 'Hours must be an array' }, { status: 400 })
-        }
-
-        // Use safer approach: find existing record first, then update or create
-        const existingDailyTask = await prisma.dailyTask.findUnique({
-            where: {
-                userId_date: {
-                    userId,
-                    date
-                }
-            }
+        const saved = await prisma.dailyTask.upsert({
+            where: { userId_date: { userId: user.id, date: body.date } },
+            update: {
+                hours,
+                wellBeingTags: body.wellBeingTags ?? [],
+                ...(body.mood !== undefined ? { mood: body.mood } : {}),
+                ...(body.note !== undefined ? { note: body.note } : {}),
+            },
+            create: {
+                userId: user.id,
+                date: body.date,
+                hours,
+                wellBeingTags: body.wellBeingTags ?? [],
+                mood: body.mood ?? null,
+                note: body.note ?? null,
+            },
         })
 
-        let result
-        if (existingDailyTask) {
-            // Update existing record
-            result = await prisma.dailyTask.update({
-                where: {
-                    userId_date: {
-                        userId,
-                        date
-                    }
-                },
-                data: {
-                    hours: hours,
-                    wellBeingTags: wellBeingTags || []
-                }
-            })
-            console.log(`Updated daily task for user ${userId} on ${date}`)
-        } else {
-            // Create new record
-            result = await prisma.dailyTask.create({
-                data: {
-                    userId,
-                    date,
-                    hours: hours || Array(24).fill(null),
-                    wellBeingTags: wellBeingTags || []
-                }
-            })
-            console.log(`Created daily task for user ${userId} on ${date}`)
-        }
+        const progress = await refreshProgress(user.id)
 
-        return NextResponse.json({ data: result })
+        return ok({ dailyTask: saved, progress })
     } catch (error) {
-        console.error('Error updating daily task:', error)
+        return handleRouteError(error, 'PUT /api/daily-tasks')
+    }
+}
 
-        // Provide more detailed error information in development
-        if (process.env.NODE_ENV === 'development') {
-            return NextResponse.json({
-                error: 'Server error',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            }, { status: 500 })
-        }
+/** Clears a whole day. Previously there was no delete at all — "remove" wrote
+ *  a row of nulls and left an empty record behind forever. */
+export async function DELETE(req: Request) {
+    try {
+        const user = await requireUser()
+        const url = new URL(req.url)
+        const date = url.searchParams.get('date')
 
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        if (!date) return fail('A date is required', 400)
+
+        await prisma.dailyTask.deleteMany({
+            where: { userId: user.id, date },
+        })
+
+        const progress = await refreshProgress(user.id)
+        return ok({ deleted: true, progress })
+    } catch (error) {
+        return handleRouteError(error, 'DELETE /api/daily-tasks')
     }
 }

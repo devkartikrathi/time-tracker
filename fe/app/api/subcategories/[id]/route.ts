@@ -1,37 +1,78 @@
-import { NextResponse } from 'next/server'
-import { getDatabaseUserId } from '@/lib/user-init'
+import { requireUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { fail, handleRouteError, ok } from '@/lib/api-response'
+import { updateSubcategorySchema } from '@/lib/validation'
 
-// Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+// Next.js 16: route params arrive as a Promise.
+type Params = { params: Promise<{ id: string }> }
+
+export async function PATCH(req: Request, { params }: Params) {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+        const { id } = await params
+        const body = updateSubcategorySchema.parse(await req.json())
 
-        const body = await req.json()
-        const { name, color } = body
+        // Scope the write to the caller. Matching on id alone would let any
+        // signed-in user edit another account's activities.
+        const existing = await prisma.subcategory.findFirst({
+            where: { id, userId: user.id },
+        })
+        if (!existing) return fail('Activity not found', 404)
 
-        const updated = await prisma.subcategory.update({ where: { id: params.id }, data: { name, color } })
-        return NextResponse.json({ data: updated })
+        const updated = await prisma.subcategory.update({
+            where: { id },
+            data: {
+                ...(body.name !== undefined ? { name: body.name } : {}),
+                ...(body.color !== undefined ? { color: body.color } : {}),
+                ...(body.category !== undefined ? { category: body.category } : {}),
+                ...(body.icon !== undefined ? { icon: body.icon } : {}),
+                ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
+                ...(body.isArchived !== undefined ? { isArchived: body.isArchived } : {}),
+            },
+        })
+
+        return ok(updated)
     } catch (error) {
-        console.error('Error updating subcategory:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'PATCH /api/subcategories/[id]')
     }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+/**
+ * Archives rather than destroys.
+ *
+ * Logged hours reference a subcategory by id inside the day's JSON, which no
+ * foreign key protects. A hard delete would leave every historical cell that
+ * used this activity pointing at nothing, silently rewriting the user's past.
+ * Archiving hides it from the picker and keeps the history readable.
+ */
+export async function DELETE(_req: Request, { params }: Params) {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+        const { id } = await params
 
-        await prisma.subcategory.delete({ where: { id: params.id } })
-        return NextResponse.json({ ok: true })
+        const existing = await prisma.subcategory.findFirst({
+            where: { id, userId: user.id },
+        })
+        if (!existing) return fail('Activity not found', 404)
+
+        const [archived] = await prisma.$transaction([
+            prisma.subcategory.update({
+                where: { id },
+                data: { isArchived: true },
+            }),
+            // Goals pointing at an archived activity can no longer make
+            // progress, so they are retired alongside it.
+            prisma.goal.updateMany({
+                where: { subcategoryId: id, userId: user.id },
+                data: { isActive: false },
+            }),
+        ])
+
+        return ok(archived)
     } catch (error) {
-        console.error('Error deleting subcategory:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'DELETE /api/subcategories/[id]')
     }
 }
-
-

@@ -1,50 +1,36 @@
-import { NextResponse } from 'next/server'
-import { initializeUser } from '@/lib/user-init'
+import { requireUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { handleRouteError, ok } from '@/lib/api-response'
+import { onboardingSchema } from '@/lib/validation'
 
-// Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
     try {
-        // Initialize user (creates if doesn't exist, returns database user)
-        const user = await initializeUser()
+        const user = await requireUser()
+        const body = onboardingSchema.parse(await req.json())
 
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const body = await req.json()
-        const { occupation, age, focus } = body || {}
-
-        // Update user with onboarding data using database user ID
-        const updatedUser = await prisma.user.update({
+        const updated = await prisma.user.update({
             where: { id: user.id },
             data: {
-                occupation,
-                age: age ? Number(age) : null,
-                focus
-            }
+                occupation: body.occupation,
+                age: body.age,
+                focus: body.focus,
+                timezone: body.timezone ?? user.timezone,
+                // Recorded explicitly rather than inferred from whether the
+                // three profile fields happen to be non-null.
+                onboardingCompleted: true,
+                onboardedAt: new Date(),
+            },
         })
 
-        // Set cookie to indicate onboarding is completed
-        const res = NextResponse.json({
-            success: true,
-            user: {
-                id: updatedUser.id,
-                clerkId: updatedUser.clerkId,
-                occupation: updatedUser.occupation,
-                age: updatedUser.age,
-                focus: updatedUser.focus
-            }
+        return ok({
+            onboardingCompleted: true,
+            occupation: updated.occupation,
+            focus: updated.focus,
         })
-        res.headers.append('Set-Cookie', 'onboardingCompleted=true; Path=/; Max-Age=31536000')
-        return res
-
     } catch (error) {
-        console.error('Onboarding error:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'POST /api/onboarding')
     }
 }
-
-

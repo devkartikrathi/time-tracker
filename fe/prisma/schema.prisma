@@ -1,19 +1,32 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Chronos — data model
+// Prisma 7: connection URL lives in prisma.config.ts; the client is instantiated
+// with a driver adapter (see lib/prisma.ts).
 
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "./generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum CategoryType {
   REST
   WORK
   OTHER
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum GoalPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
 }
 
 model User {
@@ -28,61 +41,119 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  // Relations
-  subcategories Subcategory[]
-  dailyTasks    DailyTask[] // Optimized daily tasks
-  goals         Goal[]
+  // Onboarding is an explicit fact, not inferred from whether optional
+  // profile fields happen to be filled in.
+  onboardingCompleted Boolean   @default(false)
+  onboardedAt         DateTime?
+
+  // Preferences
+  plan         Plan   @default(FREE)
+  timezone     String @default("UTC")
+  weekStartsOn Int    @default(1) // 0 = Sunday, 1 = Monday
+
+  // Denormalised streak state, recomputed on every day write so the
+  // dashboard can read it without scanning the whole history.
+  currentStreak  Int     @default(0)
+  longestStreak  Int     @default(0)
+  lastLoggedDate String? // YYYY-MM-DD
+
+  // Daily reminder, local to the user's timezone. Null = reminders off.
+  reminderHour Int?
+
+  subcategories     Subcategory[]
+  dailyTasks        DailyTask[]
+  goals             Goal[]
+  achievements      Achievement[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
 
 model Subcategory {
-  id        String       @id @default(cuid())
-  name      String
-  color     String
-  category  CategoryType // REST, WORK, or OTHER
-  userId    String
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id         String       @id @default(cuid())
+  name       String
+  color      String
+  icon       String?
+  category   CategoryType
+  sortOrder  Int          @default(0)
+  isArchived Boolean      @default(false)
+  userId     String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
-  // Relations
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   goals Goal[]
 
+  @@index([userId, isArchived])
   @@map("subcategories")
 }
 
-// New optimized daily task model
 model DailyTask {
-  id            String   @id @default(cuid())
-  date          String   @unique // YYYY-MM-DD format, unique per user
-  userId        String
-  wellBeingTags String[] // Array of well-being tags for the entire day
-  hours         Json // Array of 24 hours, each can be null or contain task data
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id     String @id @default(cuid())
+  // YYYY-MM-DD. Unique *per user* — a global unique here would let one
+  // user's entry block every other user from logging the same calendar day.
+  date   String
+  userId String
 
-  // Relations
+  wellBeingTags String[]
+  // 24 slots, each null or an HourData object. One row per day keeps the
+  // month view to a single indexed range scan.
+  hours         Json
+  mood          Int? // 1-5, optional daily check-in
+  note          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
+  @@index([userId, date])
   @@map("daily_tasks")
 }
 
 model Goal {
   id            String       @id @default(cuid())
   name          String
-  targetHours   Int
-  category      CategoryType // REST, WORK, or OTHER
-  subcategoryId String // Required - goals must be for specific subcategories
+  targetHours   Float
+  period        GoalPeriod   @default(DAILY)
+  category      CategoryType
+  subcategoryId String
   userId        String
   isActive      Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  // Relations
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   subcategory Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isActive])
   @@map("goals")
+}
+
+model Achievement {
+  id         String   @id @default(cuid())
+  key        String // e.g. "streak_7", "perfect_day", "first_week"
+  userId     String
+  unlockedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@map("achievements")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

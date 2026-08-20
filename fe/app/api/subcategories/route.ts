@@ -1,48 +1,65 @@
-import { NextResponse } from 'next/server'
-import { getDatabaseUserId } from '@/lib/user-init'
-import { getCategoryEnum } from '@/lib/constants'
+import { requireUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { fail, handleRouteError, ok } from '@/lib/api-response'
+import { createSubcategorySchema } from '@/lib/validation'
+import { limitsFor } from '@/lib/plan'
 
-// Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function GET() {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+        const user = await requireUser()
         const data = await prisma.subcategory.findMany({
-            where: { userId }
+            where: { userId: user.id, isArchived: false },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         })
-
-        return NextResponse.json({ data })
+        return ok(data)
     } catch (error) {
-        console.error('Error fetching subcategories:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'GET /api/subcategories')
     }
 }
 
 export async function POST(req: Request) {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+        const body = createSubcategorySchema.parse(await req.json())
 
-        const body = await req.json()
-        const { category, name, color } = body
+        const limits = limitsFor(user.plan)
+        const count = await prisma.subcategory.count({
+            where: { userId: user.id, isArchived: false },
+        })
+
+        if (count >= limits.maxSubcategories) {
+            return fail(
+                `Your plan allows ${limits.maxSubcategories} activities. Upgrade for more.`,
+                403,
+                { upgradeRequired: true }
+            )
+        }
+
+        const duplicate = await prisma.subcategory.findFirst({
+            where: {
+                userId: user.id,
+                isArchived: false,
+                name: { equals: body.name, mode: 'insensitive' },
+            },
+        })
+        if (duplicate) return fail(`You already have an activity called "${body.name}"`, 409)
 
         const created = await prisma.subcategory.create({
             data: {
-                category: getCategoryEnum(category),
-                name,
-                color,
-                userId
-            }
+                userId: user.id,
+                name: body.name,
+                color: body.color,
+                category: body.category,
+                icon: body.icon ?? null,
+                sortOrder: count,
+            },
         })
-        return NextResponse.json({ data: created })
+
+        return ok(created, { status: 201 })
     } catch (error) {
-        console.error('Error creating subcategory:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'POST /api/subcategories')
     }
 }
-
-

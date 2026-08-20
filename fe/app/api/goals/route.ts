@@ -1,50 +1,58 @@
-import { NextResponse } from 'next/server'
-import { getDatabaseUserId } from '@/lib/user-init'
-import { getCategoryEnum } from '@/lib/constants'
+import { requireUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { fail, handleRouteError, ok } from '@/lib/api-response'
+import { createGoalSchema } from '@/lib/validation'
+import { limitsFor } from '@/lib/plan'
 
-// Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function GET() {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-        const data = await prisma.goal.findMany({ where: { userId } })
-        return NextResponse.json({ data })
+        const user = await requireUser()
+        const data = await prisma.goal.findMany({
+            where: { userId: user.id },
+            orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+        })
+        return ok(data)
     } catch (error) {
-        console.error('Error fetching goals:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'GET /api/goals')
     }
 }
 
 export async function POST(req: Request) {
     try {
-        const userId = await getDatabaseUserId()
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const user = await requireUser()
+        const body = createGoalSchema.parse(await req.json())
 
-        const body = await req.json()
-        const { name, targetHours, category, subcategoryId } = body
-
-        if (!subcategoryId) {
-            return NextResponse.json({ error: 'Subcategory is required for goals' }, { status: 400 })
+        const limits = limitsFor(user.plan)
+        const count = await prisma.goal.count({ where: { userId: user.id, isActive: true } })
+        if (count >= limits.maxGoals) {
+            return fail(`Your plan allows ${limits.maxGoals} active goals. Upgrade for more.`, 403, {
+                upgradeRequired: true,
+            })
         }
+
+        // The subcategory must belong to the caller — otherwise a goal could be
+        // attached to another account's activity id.
+        const subcategory = await prisma.subcategory.findFirst({
+            where: { id: body.subcategoryId, userId: user.id, isArchived: false },
+        })
+        if (!subcategory) return fail('Pick one of your own activities', 400)
 
         const created = await prisma.goal.create({
             data: {
-                userId,
-                name,
-                targetHours,
-                category: getCategoryEnum(category),
-                subcategoryId
-            }
+                userId: user.id,
+                name: body.name,
+                targetHours: body.targetHours,
+                period: body.period,
+                category: subcategory.category,
+                subcategoryId: body.subcategoryId,
+            },
         })
-        return NextResponse.json({ data: created })
+
+        return ok(created, { status: 201 })
     } catch (error) {
-        console.error('Error creating goal:', error)
-        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+        return handleRouteError(error, 'POST /api/goals')
     }
 }
-
-

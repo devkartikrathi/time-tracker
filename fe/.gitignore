@@ -36,3 +36,7 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+.env*
+
+# Prisma 7 generates the client into the repo tree
+/prisma/generated
