@@ -40,8 +40,8 @@ export default function PrivacyPage() {
                         <p className="text-muted-foreground mt-1.5">
                             The optional written analysis sends an aggregated summary of your recent
                             days — hour counts per category, activity totals and mood ratings — to
-                            Anthropic&apos;s API to be interpreted. It is never used to train a
-                            model. If you never tap that button, nothing is ever sent.
+                            Google&apos;s Gemini API to be interpreted. Individual notes are not
+                            included, and nothing is sent unless you tap that button.
                         </p>
                     </section>
 

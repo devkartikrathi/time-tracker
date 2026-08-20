@@ -1,4 +1,4 @@
-import { anthropic } from '@ai-sdk/anthropic'
+import { google } from '@ai-sdk/google'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import type { DailyTask, Insight, Subcategory } from '@/types'
@@ -15,8 +15,21 @@ import { lastNDays } from '@/lib/date'
  * pre-aggregated summary and asked to interpret it.
  */
 
+/**
+ * Gemini Flash by default: this is a short summarisation over a few hundred
+ * tokens of pre-aggregated numbers, so the cheapest capable tier is the right
+ * one. Set AI_INSIGHTS_MODEL to `gemini-3.5-flash-lite` to cut cost further, or
+ * to a Pro model if the writing quality matters more than the bill.
+ */
+const DEFAULT_MODEL = 'gemini-3.5-flash'
+
+function modelId(): string {
+    return process.env.AI_INSIGHTS_MODEL || DEFAULT_MODEL
+}
+
 export function isAiConfigured(): boolean {
-    return Boolean(process.env.ANTHROPIC_API_KEY)
+    // The name the @ai-sdk/google provider reads by default.
+    return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY)
 }
 
 const aiInsightSchema = z.object({
@@ -96,9 +109,12 @@ export async function generateAiInsights(input: AiInsightInput): Promise<AiInsig
 
     try {
         const { object } = await generateObject({
-            model: anthropic('claude-opus-5'),
+            model: google(modelId()),
             schema: aiInsightSchema,
             maxRetries: 1,
+            // Low but non-zero: the same fortnight of data should not produce
+            // wildly different readings each time the user taps the button.
+            temperature: 0.4,
             system: [
                 'You analyse personal time-tracking data and write short, grounded observations.',
                 '',

@@ -12,10 +12,10 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "test": "tsx tests/logic.test.mts"
+    "test": "tsx tests/logic.test.mts && tsx tests/ai-insights.test.mts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.40",
+    "@ai-sdk/google": "^4.0.47",
     "@clerk/nextjs": "^7.7.9",
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/serverless": "^1.0.1",
